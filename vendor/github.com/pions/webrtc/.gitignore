@@ -1,0 +1,13 @@
+### JetBrains IDE ###
+#####################
+.idea/
+
+### Folders ###
+#############
+bin/
+vendor/
+
+### Files ###
+#############
+*.ivf
+tags
