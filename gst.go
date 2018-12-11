@@ -1,0 +1,82 @@
+package main
+
+/*
+#cgo pkg-config: gstreamer-1.0 gstreamer-app-1.0
+
+#include "gst.h"
+
+*/
+import "C"
+import (
+	"unsafe"
+	"errors"
+	"fmt"
+
+	"github.com/pions/webrtc"
+)
+
+func init() {
+	go C.gstreamer_recieve_start_mainloop()
+}
+
+// Pipeline is a wrapper for a GStreamer Pipeline
+type Pipeline struct {
+	Pipeline *C.GstElement
+}
+
+// CreatePipeline creates a GStreamer Pipeline
+func CreatePipeline(codecName string, width, height int) *Pipeline {
+	pipelineStr := "appsrc format=time is-live=true do-timestamp=true name=src ! application/x-rtp"
+	switch codecName {
+	case webrtc.VP8:
+		pipelineStr += ", encoding-name=VP8-DRAFT-IETF-01 ! rtpvp8depay"
+	case webrtc.VP9:
+		pipelineStr += " ! rtpvp9depay"
+	case webrtc.H264:
+		pipelineStr += " ! rtph264depay"
+	default:
+		panic("Unhandled codec " + codecName)
+	}
+	pipelineStr += " ! decodebin ! videoconvert ! videoscale"
+	pipelineStr += fmt.Sprintf(" ! video/x-raw,width=%d,height=%d,format=RGBA", width, height)
+	pipelineStr += " ! appsink name=sink"
+
+	pipelineStrUnsafe := C.CString(pipelineStr)
+	defer C.free(unsafe.Pointer(pipelineStrUnsafe))
+	return &Pipeline{Pipeline: C.gstreamer_recieve_create_pipeline(pipelineStrUnsafe)}
+}
+
+// Start starts the GStreamer Pipeline
+func (p *Pipeline) Start() {
+	C.gstreamer_recieve_start_pipeline(p.Pipeline)
+}
+
+// Stop stops the GStreamer Pipeline
+func (p *Pipeline) Stop() {
+	C.gstreamer_recieve_stop_pipeline(p.Pipeline)
+}
+
+// Push pushes a buffer on the appsrc of the GStreamer Pipeline
+func (p *Pipeline) Push(buffer []byte) {
+	b := C.CBytes(buffer)
+	defer C.free(unsafe.Pointer(b))
+	C.gstreamer_recieve_push_buffer(p.Pipeline, b, C.int(len(buffer)))
+}
+
+// Pull reads a buffer from the appsink of the GStreamer pipeline
+func (p *Pipeline) Pull(buffer []byte) (int, error) {
+	cBuf := C.CBytes(buffer)
+	defer C.free(unsafe.Pointer(cBuf))
+
+	cLen := C.int(len(buffer))
+
+	read := C.gstreamer_receive_pull_sample(p.Pipeline, cBuf, cLen)
+	if read < 0 {
+		return -1, errors.New("pull failed")
+	}
+	
+	goBuf := C.GoBytes(cBuf, read)
+	copy(buffer, goBuf)
+
+	return int(read), nil
+}
