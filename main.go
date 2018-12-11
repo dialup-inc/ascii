@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -24,6 +25,7 @@ import (
 )
 
 type Demo struct {
+	Colored   bool
 	RTCConfig webrtc.RTCConfiguration
 
 	imgMu sync.Mutex
@@ -191,6 +193,7 @@ func (d *Demo) printLoop() {
 
 		opts.FixedWidth = goterm.Width()
 		opts.FixedHeight = goterm.Height() - 1
+		opts.Colored = d.Colored
 
 		goterm.MoveCursor(1, 1)
 		goterm.Print(ascii)
@@ -210,6 +213,11 @@ func NewDemo(width, height int) *Demo {
 }
 
 func main() {
+	var (
+		color = flag.Bool("color", true, "whether to render image with colors")
+	)
+	flag.Parse()
+
 	webrtc.RegisterDefaultCodecs()
 
 	demo := NewDemo(100, 75)
@@ -218,6 +226,7 @@ func main() {
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
 		},
 	}
+	demo.Colored = *color
 
 	// Start server on an open port
 	l, err := net.Listen("tcp", ":0")
