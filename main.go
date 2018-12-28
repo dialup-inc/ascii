@@ -2,67 +2,39 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
+	"image/png"
+	"io/ioutil"
 	"log"
-	"net"
-	"net/http"
-	"os/exec"
-	"runtime"
+	"os"
 	"sync"
 	"time"
 
-	"github.com/buger/goterm"
-	"github.com/qeesung/image2ascii/convert"
-
+	"github.com/maxhawkins/asciirtc/capture"
 	"github.com/pions/webrtc"
 	"github.com/pions/webrtc/pkg/ice"
+	"github.com/pions/webrtc/pkg/media"
+	"github.com/pions/webrtc/pkg/media/samplebuilder"
 	"github.com/pions/webrtc/pkg/rtcp"
+	"github.com/pions/webrtc/pkg/rtp"
+	"github.com/pions/webrtc/pkg/rtp/codecs"
 )
 
-type Demo struct {
-	Colored   bool
-	RTCConfig webrtc.RTCConfiguration
+var saver = flag.Bool("saver", false, "")
 
-	imgMu sync.Mutex
-	img   *image.RGBA
+type Demo struct {
+	RTCConfig webrtc.RTCConfiguration
 
 	width  int
 	height int
 
+	printer *Printer
+
 	connMu sync.Mutex
 	conn   *webrtc.RTCPeerConnection
-}
-
-func (d *Demo) HandleStart(w http.ResponseWriter, r *http.Request) {
-	var offer webrtc.RTCSessionDescription
-	if err := json.NewDecoder(r.Body).Decode(&offer); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	answer, err := d.startConn(offer)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(answer)
-}
-
-func (d *Demo) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/start" {
-		d.HandleStart(w, r)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
 }
 
 func (d *Demo) newConn() (*webrtc.RTCPeerConnection, error) {
@@ -82,15 +54,21 @@ func (d *Demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	return conn, nil
 }
 
-func (d *Demo) startConn(offer webrtc.RTCSessionDescription) (answer webrtc.RTCSessionDescription, err error) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (d *Demo) Match(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
 
 	conn, err := d.newConn()
 	if err != nil {
-		return answer, err
+		cancel()
+		return err
 	}
 
-	conn.OnICEConnectionStateChange = func(s ice.ConnectionState) {
+	if err := capture.Start(d.width, d.height); err != nil {
+		cancel()
+		return err
+	}
+
+	conn.OnICEConnectionStateChange(func(s ice.ConnectionState) {
 		if s == ice.ConnectionStateClosed || s == ice.ConnectionStateFailed {
 			d.connMu.Lock()
 			if conn == d.conn {
@@ -99,32 +77,85 @@ func (d *Demo) startConn(offer webrtc.RTCSessionDescription) (answer webrtc.RTCS
 			d.connMu.Unlock()
 
 			cancel()
+
+			if err := capture.Stop(); err != nil {
+				fmt.Println(err)
+			}
 		}
+	})
+
+	track, err := conn.NewRTCSampleTrack(webrtc.DefaultPayloadTypeVP8, "video", "asciirtc")
+	if err != nil {
+		cancel()
+		return err
+	}
+	if _, err := conn.AddTrack(track); err != nil {
+		cancel()
+		return err
 	}
 
 	var once sync.Once
-	conn.OnTrack = func(track *webrtc.RTCTrack) {
+	conn.OnTrack(func(track *webrtc.RTCTrack) {
 		once.Do(func() {
 			d.handleTrack(ctx, track)
 		})
-	}
+	})
 
-	if err := d.conn.SetRemoteDescription(offer); err != nil {
-		return answer, err
+	if err := Match(ctx, "ws://localhost:8080/ws", conn); err != nil {
+		cancel()
+		return err
 	}
+	fmt.Println("CONNECTED")
 
-	answer, err = d.conn.CreateAnswer(nil)
-	if err != nil {
-		return answer, err
-	}
+	go func() {
+		if !*saver {
+			for {
+				time.Sleep(1 * time.Second)
+			}
+		}
 
-	return answer, err
+		time.Sleep(3 * time.Second)
+		fmt.Println("Sending now...")
+
+		buf := make([]byte, 1<<24)
+		for i := 0; ; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			n, err := capture.ReadFrame(buf, true)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			samp := media.RTCSample{Data: buf[:n], Samples: 1}
+
+			// if *saver {
+			// 	// fmt.Println("SAVE", n)
+			// 	ioutil.WriteFile(fmt.Sprintf("frame-%d.vp8", i), buf[:n], 0777)
+			// }
+
+			track.Samples <- samp
+
+			// if i > 2 {
+			// 	time.Sleep(100 * time.Second)
+			// 	os.Exit(0)
+			// }
+
+			// select {
+			// case track.Samples <- samp:
+			// default:
+			// }
+		}
+	}()
+
+	return err
 }
 
 func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
-	pipeline := CreatePipeline(track.Codec.Name, d.width, d.height)
-	pipeline.Start()
-
 	// Send PLIs every once in a while
 	go func() {
 		ticker := time.NewTicker(time.Second * 3)
@@ -142,73 +173,93 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 		}
 	}()
 
-	// Read raw video frames from the pipeline
+	if err := capture.StartDecode(); err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer capture.StopDecode()
+
+	builder := samplebuilder.New(256, &codecs.VP8Packet{})
+
+	packetQ := make(chan *rtp.Packet)
 	go func() {
-		stride := d.width * 4
-		frame := make([]byte, stride*d.height)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			_, err := pipeline.Pull(frame)
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			d.imgMu.Lock()
-			for i := 0; i < len(frame); i += 4 {
-				x := (i % stride) / 4
-				y := i / stride
-
-				r := frame[i+0]
-				g := frame[i+1]
-				b := frame[i+2]
-				a := frame[i+3]
-				d.img.SetRGBA(x, y, color.RGBA{r, g, b, a})
-			}
-			d.imgMu.Unlock()
+		for p := range track.Packets {
+			go func(pkt *rtp.Packet) {
+				packetQ <- pkt
+			}(p)
 		}
 	}()
 
-	// Send encoded packets to the pipeline
-	for p := range track.Packets {
-		pipeline.Push(p.Raw)
-	}
-}
+	i := 0
+	stride := d.width * 4
+	frame := make([]byte, stride*d.height)
+	for j := 0; ; j++ {
+		select {
+		case <-ctx.Done():
+			return
+		case pkt := <-packetQ:
 
-// runs in own goroutine
-func (d *Demo) printLoop() {
-	opts := convert.DefaultOptions
-	conv := convert.NewImageConverter()
+			if *saver {
+				continue
+			}
 
-	goterm.Clear()
+			// if !*saver {
+			// 	fmt.Println("in", i)
+			// 	d, _ := pkt.Marshal()
+			// 	ioutil.WriteFile(fmt.Sprintf("in-%d.pkt", i), d, 0777)
+			// }
 
-	for range time.Tick(time.Second / 5) {
-		d.imgMu.Lock()
-		ascii := conv.Image2ASCIIString(d.img, &opts)
-		d.imgMu.Unlock()
+			builder.Push(pkt)
+			for s := builder.Pop(); s != nil; s = builder.Pop() {
 
-		opts.FixedWidth = goterm.Width()
-		opts.FixedHeight = goterm.Height() - 1
-		opts.Colored = d.Colored
+				i++
+				if !*saver {
+					fmt.Println("RECV", len(s.Data))
+					ioutil.WriteFile(fmt.Sprintf("frame-%d.pkt", i), s.Data, 0777)
+				}
 
-		goterm.MoveCursor(1, 1)
-		goterm.Print(ascii)
-		goterm.Flush()
+				if err := capture.DecodeFrame(frame, s.Data); err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				yi := d.width * d.height
+				cbi := yi + d.width*d.height/4
+				cri := cbi + d.width*d.height/4
+
+				img := &image.YCbCr{
+					Y:              frame[:yi],
+					YStride:        d.width,
+					Cb:             frame[yi:cbi],
+					Cr:             frame[cbi:cri],
+					CStride:        d.width / 2,
+					SubsampleRatio: image.YCbCrSubsampleRatio420,
+					Rect:           image.Rect(0, 0, d.width, d.height),
+				}
+
+				d.printer.SetImage(img)
+
+				f, err := os.Create(fmt.Sprintf("%02d.png", i))
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer f.Close()
+				if err := png.Encode(f, img); err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
 	}
 }
 
 func NewDemo(width, height int) *Demo {
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	printer := NewPrinter()
 	d := &Demo{
-		img:    img,
-		width:  width,
-		height: height,
+		width:   width,
+		height:  height,
+		printer: printer,
 	}
-	go d.printLoop()
+	printer.Start()
 	return d
 }
 
@@ -220,118 +271,17 @@ func main() {
 
 	webrtc.RegisterDefaultCodecs()
 
-	demo := NewDemo(100, 75)
+	demo := NewDemo(640, 480)
 	demo.RTCConfig = webrtc.RTCConfiguration{
 		IceServers: []webrtc.RTCIceServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
 		},
 	}
-	demo.Colored = *color
+	demo.printer.Colored = *color
 
-	// Start server on an open port
-	l, err := net.Listen("tcp", ":0")
-	if err != nil {
-		log.Fatal(err)
+	if err := demo.Match(context.Background()); err != nil {
+		fmt.Printf("Match error: %v\n", err)
 	}
-	port := l.Addr().(*net.TCPAddr).Port
-	siteURL := fmt.Sprintf("http://localhost:%d/", port)
-	open(siteURL)
 
-	if err := http.Serve(l, demo); err != nil {
-		log.Fatal(err)
-	}
+	select {}
 }
-
-func open(url string) {
-	var err error
-
-	switch runtime.GOOS {
-	case "linux":
-		err = exec.Command("xdg-open", url).Start()
-	case "windows":
-		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
-	case "darwin":
-		err = exec.Command("open", url).Start()
-	default:
-		err = fmt.Errorf("unsupported platform")
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-const html = `<!doctype html>
-<html>
-<head>
-	<title>ASCII-RTC</title>
-	<style>
-		body {
-			font-family: sans-serif;
-		}
-		#create {
-			font-size: 24px;
-			border-radius: 10px;
-			background: white;
-			border: solid #CCC 1px;
-			margin: 15px;
-			padding: 15px 40px;
-		}
-		#video {
-			width: 100%;
-			display: none;
-		}
-	</style>
-</head>
-<body>
-	<div id="main">
-		<video id="video" autoplay muted></video> <br />
-		<button id="create" onclick="window.createSession()">Start</button>
-	</div>
-
-	<div id="signalingContainer" style="display: none">
-	Browser base64 Session Description <textarea id="localSessionDescription" readonly="true"></textarea> <br />
-	Golang base64 Session Description: <textarea id="remoteSessionDescription"></textarea> <br/>
-	<button onclick="window.startSession()"> Start Session </button>
-	</div>
-
-	<div id="logs"></div>
-	<script>
-		var log = msg => {
-			document.getElementById('logs').innerHTML += msg + '<br>'
-		}
-		var video = document.getElementById('video');
-		var button = document.getElementById('create');
-		
-		window.createSession = () => {
-			let pc = new RTCPeerConnection({
-				iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
-			});
-			pc.oniceconnectionstatechange = e => log(pc.iceConnectionState);
-			pc.onicecandidate = event => {
-				if (event.candidate) { return; }
-				const localDesc = JSON.stringify(pc.localDescription);
-				fetch('/start', {
-					method: 'POST',
-					body: localDesc,
-				})
-					.then(resp => resp.json())
-					.then(answer => pc.setRemoteDescription(answer));
-			};
-			pc.onnegotiationneeded = e => {
-				pc.createOffer()
-					.then(d => pc.setLocalDescription(d))
-					.catch(log);
-			};
-			
-			navigator.mediaDevices.getUserMedia({video: true, audio: false})
-				.then(stream => {
-					pc.addStream(stream);
-					video.srcObject = stream;
-					button.style.display = 'none';
-					video.style.display = 'block';
-				})
-				.catch(log);
-		};
-	</script>
-</body>
-</html>`
