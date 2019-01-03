@@ -88,13 +88,14 @@ func main() {
 				send <- msg
 
 			case "exit":
-				break
+				goto CLOSE
 
 			default:
 				fmt.Println("unknown type", msg.Type)
-				break
+				goto CLOSE
 			}
 		}
+	CLOSE:
 
 		close(send)
 		busMu.Lock()

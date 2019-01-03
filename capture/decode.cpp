@@ -28,7 +28,7 @@ int vpx_decode(const char* frame, int frame_len, char* yv12_frame, int yv12_len)
   // Decode the frame
   vpx_codec_err_t err = vpx_codec_decode(&codec, (const unsigned char*) frame, frame_len, NULL, 0);
   if (err) {
-    // printf("err: %s\n", vpx_codec_err_to_string(err));
+    printf("err: %s\n", vpx_codec_err_to_string(err));
     return E_DECODE_FAILED;
   }
 

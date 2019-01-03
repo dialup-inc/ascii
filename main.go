@@ -6,10 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/png"
-	"io/ioutil"
-	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -17,13 +13,10 @@ import (
 	"github.com/pions/webrtc"
 	"github.com/pions/webrtc/pkg/ice"
 	"github.com/pions/webrtc/pkg/media"
-	"github.com/pions/webrtc/pkg/media/samplebuilder"
 	"github.com/pions/webrtc/pkg/rtcp"
 	"github.com/pions/webrtc/pkg/rtp"
 	"github.com/pions/webrtc/pkg/rtp/codecs"
 )
-
-var saver = flag.Bool("saver", false, "")
 
 type Demo struct {
 	RTCConfig webrtc.RTCConfiguration
@@ -32,6 +25,8 @@ type Demo struct {
 	height int
 
 	printer *Printer
+
+	jitter JitterBuffer
 
 	connMu sync.Mutex
 	conn   *webrtc.RTCPeerConnection
@@ -108,14 +103,10 @@ func (d *Demo) Match(ctx context.Context) error {
 	fmt.Println("CONNECTED")
 
 	go func() {
-		if !*saver {
-			for {
-				time.Sleep(1 * time.Second)
-			}
-		}
-
 		time.Sleep(3 * time.Second)
 		fmt.Println("Sending now...")
+
+		ticker := time.Tick(40 * time.Millisecond)
 
 		buf := make([]byte, 1<<24)
 		for i := 0; ; i++ {
@@ -133,22 +124,9 @@ func (d *Demo) Match(ctx context.Context) error {
 
 			samp := media.RTCSample{Data: buf[:n], Samples: 1}
 
-			// if *saver {
-			// 	// fmt.Println("SAVE", n)
-			// 	ioutil.WriteFile(fmt.Sprintf("frame-%d.vp8", i), buf[:n], 0777)
-			// }
+			<-ticker
 
 			track.Samples <- samp
-
-			// if i > 2 {
-			// 	time.Sleep(100 * time.Second)
-			// 	os.Exit(0)
-			// }
-
-			// select {
-			// case track.Samples <- samp:
-			// default:
-			// }
 		}
 	}()
 
@@ -179,77 +157,84 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 	}
 	defer capture.StopDecode()
 
-	builder := samplebuilder.New(256, &codecs.VP8Packet{})
+	var ts uint32
+	var payload []byte
 
-	packetQ := make(chan *rtp.Packet)
-	go func() {
-		for p := range track.Packets {
-			go func(pkt *rtp.Packet) {
-				packetQ <- pkt
-			}(p)
-		}
-	}()
-
-	i := 0
-	stride := d.width * 4
-	frame := make([]byte, stride*d.height)
 	for j := 0; ; j++ {
 		select {
 		case <-ctx.Done():
 			return
-		case pkt := <-packetQ:
+		case newPkt := <-track.Packets:
 
-			if *saver {
-				continue
+			// Make a copy of the packet
+			pay := make([]byte, len(newPkt.Payload))
+			copy(pay, newPkt.Payload)
+			newPkt = &rtp.Packet{
+				Marker:         newPkt.Marker,
+				Timestamp:      newPkt.Timestamp,
+				SequenceNumber: newPkt.SequenceNumber,
+				Payload:        pay,
 			}
 
-			// if !*saver {
-			// 	fmt.Println("in", i)
-			// 	d, _ := pkt.Marshal()
-			// 	ioutil.WriteFile(fmt.Sprintf("in-%d.pkt", i), d, 0777)
-			// }
+			d.jitter.Push(newPkt)
 
-			builder.Push(pkt)
-			for s := builder.Pop(); s != nil; s = builder.Pop() {
-
-				i++
-				if !*saver {
-					fmt.Println("RECV", len(s.Data))
-					ioutil.WriteFile(fmt.Sprintf("frame-%d.pkt", i), s.Data, 0777)
+			for {
+				p := d.jitter.Pop()
+				if p == nil {
+					break
 				}
 
-				if err := capture.DecodeFrame(frame, s.Data); err != nil {
+				if p.Timestamp != ts { // New packet, process the existing payload first
+					fmt.Println("PROCESS", len(payload))
+					if err := d.decode(payload); err != nil {
+						fmt.Println(err)
+					}
+					payload = nil
+					ts = p.Timestamp
+				}
+
+				fmt.Println(p.SequenceNumber, p.Timestamp, p.Marker)
+
+				vp8 := &codecs.VP8Packet{}
+				if _, err := vp8.Unmarshal(p); err != nil {
 					fmt.Println(err)
 					continue
 				}
-
-				yi := d.width * d.height
-				cbi := yi + d.width*d.height/4
-				cri := cbi + d.width*d.height/4
-
-				img := &image.YCbCr{
-					Y:              frame[:yi],
-					YStride:        d.width,
-					Cb:             frame[yi:cbi],
-					Cr:             frame[cbi:cri],
-					CStride:        d.width / 2,
-					SubsampleRatio: image.YCbCrSubsampleRatio420,
-					Rect:           image.Rect(0, 0, d.width, d.height),
-				}
-
-				d.printer.SetImage(img)
-
-				f, err := os.Create(fmt.Sprintf("%02d.png", i))
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer f.Close()
-				if err := png.Encode(f, img); err != nil {
-					log.Fatal(err)
-				}
+				payload = append(payload, vp8.Payload...)
 			}
 		}
 	}
+}
+
+func (d *Demo) decode(payload []byte) error {
+	if len(payload) == 0 {
+		return nil
+	}
+
+	stride := d.width * 4
+	frame := make([]byte, stride*d.height) // todo: less alloc
+
+	if err := capture.DecodeFrame(frame, payload); err != nil {
+		return err
+	}
+
+	yi := d.width * d.height
+	cbi := yi + d.width*d.height/4
+	cri := cbi + d.width*d.height/4
+
+	img := &image.YCbCr{
+		Y:              frame[:yi],
+		YStride:        d.width,
+		Cb:             frame[yi:cbi],
+		Cr:             frame[cbi:cri],
+		CStride:        d.width / 2,
+		SubsampleRatio: image.YCbCrSubsampleRatio420,
+		Rect:           image.Rect(0, 0, d.width, d.height),
+	}
+
+	d.printer.SetImage(img)
+
+	return nil
 }
 
 func NewDemo(width, height int) *Demo {
@@ -259,7 +244,7 @@ func NewDemo(width, height int) *Demo {
 		height:  height,
 		printer: printer,
 	}
-	printer.Start()
+	// printer.Start()
 	return d
 }
 
