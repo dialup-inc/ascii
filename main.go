@@ -11,11 +11,11 @@ import (
 
 	"github.com/maxhawkins/asciirtc/capture"
 	"github.com/pions/rtcp"
-	"github.com/pions/rtp"
 	"github.com/pions/rtp/codecs"
 	"github.com/pions/webrtc"
 	"github.com/pions/webrtc/pkg/ice"
 	"github.com/pions/webrtc/pkg/media"
+	"github.com/pions/webrtc/pkg/media/samplebuilder"
 )
 
 type Demo struct {
@@ -25,8 +25,6 @@ type Demo struct {
 	height int
 
 	printer *Printer
-
-	jitter JitterBuffer
 
 	connMu sync.Mutex
 	conn   *webrtc.RTCPeerConnection
@@ -157,53 +155,20 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 	}
 	defer capture.StopDecode()
 
-	var ts uint32
-	var payload []byte
-
+	builder := samplebuilder.New(256, &codecs.VP8Packet{})
 	for j := 0; ; j++ {
 		select {
 		case <-ctx.Done():
 			return
 		case newPkt := <-track.Packets:
+			builder.Push(newPkt)
 
-			// Make a copy of the packet
-			pay := make([]byte, len(newPkt.Payload))
-			copy(pay, newPkt.Payload)
-			newPkt = &rtp.Packet{
-				Header: rtp.Header{
-					Marker:         newPkt.Marker,
-					Timestamp:      newPkt.Timestamp,
-					SequenceNumber: newPkt.SequenceNumber,
-				},
-				Payload: pay,
-			}
-
-			d.jitter.Push(newPkt)
-
-			for {
-				p := d.jitter.Pop()
-				if p == nil {
-					break
-				}
-
-				if p.Timestamp != ts { // New packet, process the existing payload first
-					fmt.Println("PROCESS", len(payload))
-					if err := d.decode(payload); err != nil {
-						fmt.Println(err)
-					}
-					payload = nil
-					ts = p.Timestamp
-				}
-
-				fmt.Println(p.SequenceNumber, p.Timestamp, p.Marker)
-
-				vp8 := &codecs.VP8Packet{}
-				if _, err := vp8.Unmarshal(p); err != nil {
+			for s := builder.Pop(); s != nil; s = builder.Pop() {
+				if err := d.decode(s.Data); err != nil {
 					fmt.Println(err)
-					continue
 				}
-				payload = append(payload, vp8.Payload...)
 			}
+
 		}
 	}
 }
@@ -246,7 +211,7 @@ func NewDemo(width, height int) *Demo {
 		height:  height,
 		printer: printer,
 	}
-	// printer.Start()
+	printer.Start()
 	return d
 }
 
