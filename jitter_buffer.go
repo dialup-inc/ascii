@@ -1,6 +1,6 @@
 package main
 
-import "github.com/pions/webrtc/pkg/rtp"
+import "github.com/pions/rtp"
 
 type JitterBuffer struct {
 	buffer [65536]*rtp.Packet

@@ -4,42 +4,23 @@
   Pion WebRTC
   <br>
 </h1>
-<h4 align="center">A Golang implementation of the WebRTC API</h4>
+<h4 align="center">A pure Go implementation of the WebRTC API</h4>
 <p align="center">
+  <a href="https://pion.ly"><img src="https://img.shields.io/badge/pion-webrtc-gray.svg?longCache=true&colorB=brightgreen" alt="Pion webrtc"></a>
   <a href="https://sourcegraph.com/github.com/pions/webrtc?badge"><img src="https://sourcegraph.com/github.com/pions/webrtc/-/badge.svg" alt="Sourcegraph Widget"></a>
   <a href="http://gophers.slack.com/messages/pion"><img src="https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=brightgreen" alt="Slack Widget"></a>
+  <a href="https://waffle.io/pions/webrtc"><img src="https://img.shields.io/badge/pm-waffle-gray.svg?longCache=true&colorB=brightgreen" alt="Waffle board"></a>
   <br>
   <a href="https://travis-ci.org/pions/webrtc"><img src="https://travis-ci.org/pions/webrtc.svg?branch=master" alt="Build Status"></a>
   <a href="https://godoc.org/github.com/pions/webrtc"><img src="https://godoc.org/github.com/pions/webrtc?status.svg" alt="GoDoc"></a>
   <a href="https://coveralls.io/github/pions/webrtc"><img src="https://coveralls.io/repos/github/pions/webrtc/badge.svg" alt="Coverage Status"></a>
   <a href="https://goreportcard.com/report/github.com/pions/webrtc"><img src="https://goreportcard.com/badge/github.com/pions/webrtc" alt="Go Report Card"></a>
   <a href="https://www.codacy.com/app/Sean-Der/webrtc"><img src="https://api.codacy.com/project/badge/Grade/18f4aec384894e6aac0b94effe51961d" alt="Codacy Badge"></a>
-  <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 <br>
 
 See [DESIGN.md](DESIGN.md) for an overview of features and future goals.
-
-### Install
-Currently Pion uses CGO and OpenSSL for DTLS. We are actively working on replacing it. For now you have to make sure to install a C compliler and the OpenSSL headers for
-your platform:
-#### Ubuntu/Debian
-`sudo apt-get install libssl-dev`
-#### OSX
-```
-brew install openssl
-export CPATH=`brew --prefix`/opt/openssl/include
-export LIBRARY_PATH=`brew --prefix`/opt/openssl/lib
-go get -u github.com/pions/webrtc
-```
-#### Fedora
-`sudo yum install openssl-devel`
-#### Windows
-1. Install [MSYS2](https://www.msys2.org/)
-2. Download [pkg-config-lite](https://sourceforge.net/projects/pkgconfiglite/) and put `pkg-config.exe` on the `PATH` environment variable.
-3. From the MSYS2 console: Run `pacman -S mingw-w64-x86_64-openssl` to install OpenSSL.
-4. From the MSYS2 console: Run `pacman -S mingw-w64-x86_64-gcc` to install the C compiler.
-5. Set the `PKG_CONFIG_PATH` environment variable. ie. Run the following from the Windows console: `SETX PKG_CONFIG_PATH C:\msys64\mingw64\lib\pkgconfig`, That folder should contain `openssl.pc`.
 
 ### Usage
 Check out the **[example applications](examples/README.md)** to help you along your Pion WebRTC journey.
@@ -88,6 +69,11 @@ Check out the **[contributing wiki](https://github.com/pions/webrtc/wiki/Contrib
 * [earle](https://github.com/aguilEA) - *Generate DTLS fingerprint in Go*
 * [Jake B](https://github.com/silbinarywolf) - *Fix Windows installation instructions*
 * [Michael MacDonald](https://github.com/mjmac)
+* [Oleg Kovalov](https://github.com/cristaloleg) *Use wildcards instead of hardcoding travis-ci config*
+* [Woodrow Douglass](https://github.com/wdouglass) *RTCP, RTP improvements, G.722 support, Bugfixes*
+* [Tobias Fridén](https://github.com/tobiasfriden) *SRTP authentication verification*
+* [Yutaka Takeda](https://github.com/enobufs) *Fix ICE connection timeout*
+* [Hugo Arregui](https://github.com/hugoArregui) *Fix connection timeout*
 
 ### License
-MIT License - see [LICENSE.md](LICENSE.md) for full text
+MIT License - see [LICENSE](LICENSE) for full text

@@ -7,25 +7,30 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"encoding/binary"
-
-	"github.com/pions/webrtc/internal/network"
-	"github.com/pions/webrtc/internal/sdp"
+	"github.com/pions/rtcp"
+	"github.com/pions/rtp"
+	"github.com/pions/sdp"
 	"github.com/pions/webrtc/pkg/ice"
-	"github.com/pions/webrtc/pkg/media"
+	"github.com/pions/webrtc/pkg/logging"
 	"github.com/pions/webrtc/pkg/rtcerr"
-	"github.com/pions/webrtc/pkg/rtcp"
-	"github.com/pions/webrtc/pkg/rtp"
 	"github.com/pkg/errors"
 )
 
-// Unknown defines default public constant to use for "enum" like struct
-// comparisons when no value was defined.
-const Unknown = iota
+var pcLog = logging.NewScopedLogger("pc")
+
+const (
+	// Unknown defines default public constant to use for "enum" like struct
+	// comparisons when no value was defined.
+	Unknown    = iota
+	unknownStr = "unknown"
+
+	receiveMTU = 8192
+)
 
 // RTCPeerConnection represents a WebRTC connection that establishes a
 // peer-to-peer communications with another RTCPeerConnection instance in a
@@ -85,12 +90,7 @@ type RTCPeerConnection struct {
 	lastOffer  string
 	lastAnswer string
 
-	// Media
-	mediaEngine     *MediaEngine
 	rtpTransceivers []*RTCRtpTransceiver
-
-	// sctpTransport
-	sctpTransport *RTCSctpTransport
 
 	// DataChannels
 	dataChannels map[uint16]*RTCDataChannel
@@ -98,33 +98,30 @@ type RTCPeerConnection struct {
 	// OnNegotiationNeeded        func() // FIXME NOT-USED
 	// OnIceCandidate             func() // FIXME NOT-USED
 	// OnIceCandidateError        func() // FIXME NOT-USED
-	// OnSignalingStateChange     func() // FIXME NOT-USED
-
-	// OnIceConnectionStateChange designates an event handler which is called
-	// when an ice connection state is changed.
-	OnICEConnectionStateChange func(ice.ConnectionState)
 
 	// OnIceGatheringStateChange  func() // FIXME NOT-USED
 	// OnConnectionStateChange    func() // FIXME NOT-USED
 
-	// OnTrack designates an event handler which is called when remote track
-	// arrives from a remote peer.
-	OnTrack func(*RTCTrack)
+	onSignalingStateChangeHandler     func(RTCSignalingState)
+	onICEConnectionStateChangeHandler func(ice.ConnectionState)
+	onTrackHandler                    func(*RTCTrack)
+	onDataChannelHandler              func(*RTCDataChannel)
 
-	// OnDataChannel designates an event handler which is invoked when a data
-	// channel message arrives from a remote peer.
-	OnDataChannel func(*RTCDataChannel)
+	iceGatherer   *RTCIceGatherer
+	iceTransport  *RTCIceTransport
+	dtlsTransport *RTCDtlsTransport
+	sctpTransport *RTCSctpTransport
 
-	// Deprecated: Internal mechanism which will be removed.
-	networkManager *network.Manager
+	// A reference to the associated API state used by this connection
+	api *API
 }
 
-// New creates a new RTCPeerConfiguration with the provided configuration
-func New(configuration RTCConfiguration) (*RTCPeerConnection, error) {
+// NewRTCPeerConnection creates a new RTCPeerConnection with the provided configuration against the received API object
+func (api *API) NewRTCPeerConnection(configuration RTCConfiguration) (*RTCPeerConnection, error) {
 	// https://w3c.github.io/webrtc-pc/#constructor (Step #2)
 	// Some variables defined explicitly despite their implicit zero values to
 	// allow better readability to understand what is happening.
-	pc := RTCPeerConnection{
+	pc := &RTCPeerConnection{
 		configuration: RTCConfiguration{
 			IceServers:           []RTCIceServer{},
 			IceTransportPolicy:   RTCIceTransportPolicyAll,
@@ -142,9 +139,9 @@ func New(configuration RTCConfiguration) (*RTCPeerConnection, error) {
 		IceConnectionState: ice.ConnectionStateNew, // FIXME REMOVE
 		IceGatheringState:  RTCIceGatheringStateNew,
 		ConnectionState:    RTCPeerConnectionStateNew,
-		mediaEngine:        DefaultMediaEngine,
-		sctpTransport:      newRTCSctpTransport(),
 		dataChannels:       make(map[uint16]*RTCDataChannel),
+
+		api: api,
 	}
 
 	var err error
@@ -152,27 +149,31 @@ func New(configuration RTCConfiguration) (*RTCPeerConnection, error) {
 		return nil, err
 	}
 
-	pc.networkManager, err = network.NewManager(pc.generateChannel, pc.dataChannelEventHandler, pc.iceStateChange)
+	// For now we eagerly allocate and start the gatherer
+	gatherer, err := pc.createIceGatherer()
+	if err != nil {
+		return nil, err
+	}
+	pc.iceGatherer = gatherer
+
+	err = pc.gather()
+
 	if err != nil {
 		return nil, err
 	}
 
-	// FIXME Temporary code before IceAgent and RTCIceTransport Rebuild
-	for _, server := range pc.configuration.IceServers {
-		for _, rawURL := range server.URLs {
-			url, err := ice.ParseURL(rawURL)
-			if err != nil {
-				return nil, err
-			}
+	// Create the ice transport
+	iceTransport := pc.createICETransport()
+	pc.iceTransport = iceTransport
 
-			err = pc.networkManager.AddURL(url)
-			if err != nil {
-				fmt.Println(err)
-			}
-		}
+	// Create the DTLS transport
+	dtlsTransport, err := pc.createDTLSTransport()
+	if err != nil {
+		return nil, err
 	}
+	pc.dtlsTransport = dtlsTransport
 
-	return &pc, nil
+	return pc, nil
 }
 
 // initConfiguration defines validation of the specified RTCConfiguration and
@@ -224,13 +225,105 @@ func (pc *RTCPeerConnection) initConfiguration(configuration RTCConfiguration) e
 
 	if len(configuration.IceServers) > 0 {
 		for _, server := range configuration.IceServers {
-			if err := server.validate(); err != nil {
+			if _, err := server.validate(); err != nil {
 				return err
 			}
 		}
 		pc.configuration.IceServers = configuration.IceServers
 	}
 	return nil
+}
+
+// OnSignalingStateChange sets an event handler which is invoked when the
+// peer connection's signaling state changes
+func (pc *RTCPeerConnection) OnSignalingStateChange(f func(RTCSignalingState)) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.onSignalingStateChangeHandler = f
+}
+
+func (pc *RTCPeerConnection) onSignalingStateChange(newState RTCSignalingState) (done chan struct{}) {
+	pc.RLock()
+	hdlr := pc.onSignalingStateChangeHandler
+	pc.RUnlock()
+
+	pcLog.Infof("signaling state changed to %s", newState)
+	done = make(chan struct{})
+	if hdlr == nil {
+		close(done)
+		return
+	}
+
+	go func() {
+		hdlr(newState)
+		close(done)
+	}()
+
+	return
+}
+
+// OnDataChannel sets an event handler which is invoked when a data
+// channel message arrives from a remote peer.
+func (pc *RTCPeerConnection) OnDataChannel(f func(*RTCDataChannel)) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.onDataChannelHandler = f
+}
+
+// OnTrack sets an event handler which is called when remote track
+// arrives from a remote peer.
+func (pc *RTCPeerConnection) OnTrack(f func(*RTCTrack)) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.onTrackHandler = f
+}
+
+func (pc *RTCPeerConnection) onTrack(t *RTCTrack) (done chan struct{}) {
+	pc.RLock()
+	hdlr := pc.onTrackHandler
+	pc.RUnlock()
+
+	pcLog.Debugf("got new track: %+v", t)
+	done = make(chan struct{})
+	if hdlr == nil || t == nil {
+		close(done)
+		return
+	}
+
+	go func() {
+		hdlr(t)
+		close(done)
+	}()
+
+	return
+}
+
+// OnICEConnectionStateChange sets an event handler which is called
+// when an ICE connection state is changed.
+func (pc *RTCPeerConnection) OnICEConnectionStateChange(f func(ice.ConnectionState)) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.onICEConnectionStateChangeHandler = f
+}
+
+func (pc *RTCPeerConnection) onICEConnectionStateChange(cs ice.ConnectionState) (done chan struct{}) {
+	pc.RLock()
+	hdlr := pc.onICEConnectionStateChangeHandler
+	pc.RUnlock()
+
+	pcLog.Infof("ICE connection state changed: %s", cs)
+	done = make(chan struct{})
+	if hdlr == nil {
+		close(done)
+		return
+	}
+
+	go func() {
+		hdlr(cs)
+		close(done)
+	}()
+
+	return
 }
 
 // SetConfiguration updates the configuration of this RTCPeerConnection object.
@@ -296,7 +389,7 @@ func (pc *RTCPeerConnection) SetConfiguration(configuration RTCConfiguration) er
 	if len(configuration.IceServers) > 0 {
 		// https://www.w3.org/TR/webrtc/#set-the-configuration (step #11.3)
 		for _, server := range configuration.IceServers {
-			if err := server.validate(); err != nil {
+			if _, err := server.validate(); err != nil {
 				return err
 			}
 		}
@@ -329,32 +422,77 @@ func (pc *RTCPeerConnection) CreateOffer(options *RTCOfferOptions) (RTCSessionDe
 		return RTCSessionDescription{}, &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
 	}
 
-	d := sdp.NewJSEPSessionDescription(pc.networkManager.DTLSFingerprint(), useIdentity)
-	candidates := pc.generateLocalCandidates()
+	d := sdp.NewJSEPSessionDescription(useIdentity)
+	pc.addFingerprint(d)
+
+	iceParams, err := pc.iceGatherer.GetLocalParameters()
+	if err != nil {
+		return RTCSessionDescription{}, err
+	}
+
+	candidates, err := pc.iceGatherer.GetLocalCandidates()
+	if err != nil {
+		return RTCSessionDescription{}, err
+	}
 
 	bundleValue := "BUNDLE"
 
-	if pc.addRTPMediaSection(d, RTCRtpCodecTypeAudio, "audio", RTCRtpTransceiverDirectionSendrecv, candidates, sdp.ConnectionRoleActpass) {
+	if pc.addRTPMediaSection(d, RTCRtpCodecTypeAudio, "audio", iceParams, RTCRtpTransceiverDirectionSendrecv, candidates, sdp.ConnectionRoleActpass) {
 		bundleValue += " audio"
 	}
-	if pc.addRTPMediaSection(d, RTCRtpCodecTypeVideo, "video", RTCRtpTransceiverDirectionSendrecv, candidates, sdp.ConnectionRoleActpass) {
+	if pc.addRTPMediaSection(d, RTCRtpCodecTypeVideo, "video", iceParams, RTCRtpTransceiverDirectionSendrecv, candidates, sdp.ConnectionRoleActpass) {
 		bundleValue += " video"
 	}
 
-	pc.addDataMediaSection(d, "data", candidates, sdp.ConnectionRoleActpass)
+	pc.addDataMediaSection(d, "data", iceParams, candidates, sdp.ConnectionRoleActpass)
 	d = d.WithValueAttribute(sdp.AttrKeyGroup, bundleValue+" data")
 
 	for _, m := range d.MediaDescriptions {
 		m.WithPropertyAttribute("setup:actpass")
 	}
 
-	pc.CurrentLocalDescription = &RTCSessionDescription{
+	desc := RTCSessionDescription{
 		Type:   RTCSdpTypeOffer,
 		Sdp:    d.Marshal(),
 		parsed: d,
 	}
+	pc.lastOffer = desc.Sdp
 
-	return *pc.CurrentLocalDescription, nil
+	return desc, nil
+}
+
+func (pc *RTCPeerConnection) createIceGatherer() (*RTCIceGatherer, error) {
+	g, err := pc.api.NewRTCIceGatherer(RTCIceGatherOptions{
+		ICEServers: pc.configuration.IceServers,
+		// TODO: GatherPolicy
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return g, nil
+}
+
+func (pc *RTCPeerConnection) gather() error {
+	return pc.iceGatherer.Gather()
+}
+
+func (pc *RTCPeerConnection) createICETransport() *RTCIceTransport {
+	t := pc.api.NewRTCIceTransport(pc.iceGatherer)
+
+	t.OnConnectionStateChange(func(state RTCIceTransportState) {
+		// We convert the state back to the ICE state to not brake the
+		// existing public API at this point.
+		iceState := state.toICE()
+		pc.iceStateChange(iceState)
+	})
+
+	return t
+}
+
+func (pc *RTCPeerConnection) createDTLSTransport() (*RTCDtlsTransport, error) {
+	dtlsTransport, err := pc.api.NewRTCDtlsTransport(pc.iceTransport, pc.configuration.Certificates)
+	return dtlsTransport, err
 }
 
 // CreateAnswer starts the RTCPeerConnection and generates the localDescription
@@ -368,11 +506,21 @@ func (pc *RTCPeerConnection) CreateAnswer(options *RTCAnswerOptions) (RTCSession
 		return RTCSessionDescription{}, &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
 	}
 
-	candidates := pc.generateLocalCandidates()
-	d := sdp.NewJSEPSessionDescription(pc.networkManager.DTLSFingerprint(), useIdentity)
+	iceParams, err := pc.iceGatherer.GetLocalParameters()
+	if err != nil {
+		return RTCSessionDescription{}, err
+	}
+
+	candidates, err := pc.iceGatherer.GetLocalCandidates()
+	if err != nil {
+		return RTCSessionDescription{}, err
+	}
+
+	d := sdp.NewJSEPSessionDescription(useIdentity)
+	pc.addFingerprint(d)
 
 	bundleValue := "BUNDLE"
-	for _, remoteMedia := range pc.CurrentRemoteDescription.parsed.MediaDescriptions {
+	for _, remoteMedia := range pc.RemoteDescription().parsed.MediaDescriptions {
 		// TODO @trivigy better SDP parser
 		var peerDirection RTCRtpTransceiverDirection
 		midValue := ""
@@ -393,33 +541,157 @@ func (pc *RTCPeerConnection) CreateAnswer(options *RTCAnswerOptions) (RTCSession
 		}
 
 		if strings.HasPrefix(*remoteMedia.MediaName.String(), "audio") {
-			if pc.addRTPMediaSection(d, RTCRtpCodecTypeAudio, midValue, peerDirection, candidates, sdp.ConnectionRoleActive) {
+			if pc.addRTPMediaSection(d, RTCRtpCodecTypeAudio, midValue, iceParams, peerDirection, candidates, sdp.ConnectionRoleActive) {
 				appendBundle()
 			}
 		} else if strings.HasPrefix(*remoteMedia.MediaName.String(), "video") {
-			if pc.addRTPMediaSection(d, RTCRtpCodecTypeVideo, midValue, peerDirection, candidates, sdp.ConnectionRoleActive) {
+			if pc.addRTPMediaSection(d, RTCRtpCodecTypeVideo, midValue, iceParams, peerDirection, candidates, sdp.ConnectionRoleActive) {
 				appendBundle()
 			}
 		} else if strings.HasPrefix(*remoteMedia.MediaName.String(), "application") {
-			pc.addDataMediaSection(d, midValue, candidates, sdp.ConnectionRoleActive)
+			pc.addDataMediaSection(d, midValue, iceParams, candidates, sdp.ConnectionRoleActive)
 			appendBundle()
 		}
 	}
 
 	d = d.WithValueAttribute(sdp.AttrKeyGroup, bundleValue)
 
-	pc.CurrentLocalDescription = &RTCSessionDescription{
+	desc := RTCSessionDescription{
 		Type:   RTCSdpTypeAnswer,
 		Sdp:    d.Marshal(),
 		parsed: d,
 	}
-	return *pc.CurrentLocalDescription, nil
+	pc.lastAnswer = desc.Sdp
+	return desc, nil
 }
 
-// // SetLocalDescription sets the SessionDescription of the local peer
-// func (pc *RTCPeerConnection) SetLocalDescription() {
-// 	panic("not implemented yet") // FIXME NOT-IMPLEMENTED nolint
-// }
+// 4.4.1.6 Set the RTCSessionDescription
+func (pc *RTCPeerConnection) setDescription(sd *RTCSessionDescription, op rtcStateChangeOp) error {
+	if pc.isClosed {
+		return &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
+	}
+
+	cur := pc.SignalingState
+	setLocal := rtcStateChangeOpSetLocal
+	setRemote := rtcStateChangeOpSetRemote
+	newSdpDoesNotMatchOffer := &rtcerr.InvalidModificationError{Err: errors.New("New sdp does not match previous offer")}
+	newSdpDoesNotMatchAnswer := &rtcerr.InvalidModificationError{Err: errors.New("New sdp does not match previous answer")}
+
+	var nextState RTCSignalingState
+	var err error
+	switch op {
+	case setLocal:
+		switch sd.Type {
+		// stable->SetLocal(offer)->have-local-offer
+		case RTCSdpTypeOffer:
+			if sd.Sdp != pc.lastOffer {
+				return newSdpDoesNotMatchOffer
+			}
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateHaveLocalOffer, setLocal, sd.Type)
+			if err == nil {
+				pc.PendingLocalDescription = sd
+			}
+		// have-remote-offer->SetLocal(answer)->stable
+		// have-local-pranswer->SetLocal(answer)->stable
+		case RTCSdpTypeAnswer:
+			if sd.Sdp != pc.lastAnswer {
+				return newSdpDoesNotMatchAnswer
+			}
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateStable, setLocal, sd.Type)
+			if err == nil {
+				pc.CurrentLocalDescription = sd
+				pc.CurrentRemoteDescription = pc.PendingRemoteDescription
+				pc.PendingRemoteDescription = nil
+				pc.PendingLocalDescription = nil
+			}
+		case RTCSdpTypeRollback:
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateStable, setLocal, sd.Type)
+			if err == nil {
+				pc.PendingLocalDescription = nil
+			}
+		// have-remote-offer->SetLocal(pranswer)->have-local-pranswer
+		case RTCSdpTypePranswer:
+			if sd.Sdp != pc.lastAnswer {
+				return newSdpDoesNotMatchAnswer
+			}
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateHaveLocalPranswer, setLocal, sd.Type)
+			if err == nil {
+				pc.PendingLocalDescription = sd
+			}
+		default:
+			return &rtcerr.OperationError{Err: fmt.Errorf("Invalid state change op: %s(%s)", op, sd.Type)}
+		}
+	case setRemote:
+		switch sd.Type {
+		// stable->SetRemote(offer)->have-remote-offer
+		case RTCSdpTypeOffer:
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateHaveRemoteOffer, setRemote, sd.Type)
+			if err == nil {
+				pc.PendingRemoteDescription = sd
+			}
+		// have-local-offer->SetRemote(answer)->stable
+		// have-remote-pranswer->SetRemote(answer)->stable
+		case RTCSdpTypeAnswer:
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateStable, setRemote, sd.Type)
+			if err == nil {
+				pc.CurrentRemoteDescription = sd
+				pc.CurrentLocalDescription = pc.PendingLocalDescription
+				pc.PendingRemoteDescription = nil
+				pc.PendingLocalDescription = nil
+			}
+		case RTCSdpTypeRollback:
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateStable, setRemote, sd.Type)
+			if err == nil {
+				pc.PendingRemoteDescription = nil
+			}
+		// have-local-offer->SetRemote(pranswer)->have-remote-pranswer
+		case RTCSdpTypePranswer:
+			nextState, err = checkNextSignalingState(cur, RTCSignalingStateHaveRemotePranswer, setRemote, sd.Type)
+			if err == nil {
+				pc.PendingRemoteDescription = sd
+			}
+		default:
+			return &rtcerr.OperationError{Err: fmt.Errorf("Invalid state change op: %s(%s)", op, sd.Type)}
+		}
+	default:
+		return &rtcerr.OperationError{Err: fmt.Errorf("Unhandled state change op: %q", op)}
+	}
+
+	if err == nil {
+		pc.SignalingState = nextState
+		pc.onSignalingStateChange(nextState)
+	}
+	return err
+}
+
+// SetLocalDescription sets the SessionDescription of the local peer
+func (pc *RTCPeerConnection) SetLocalDescription(desc RTCSessionDescription) error {
+	if pc.isClosed {
+		return &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
+	}
+
+	// JSEP 5.4
+	if desc.Sdp == "" {
+		switch desc.Type {
+		case RTCSdpTypeAnswer, RTCSdpTypePranswer:
+			desc.Sdp = pc.lastAnswer
+		case RTCSdpTypeOffer:
+			desc.Sdp = pc.lastOffer
+		default:
+			return &rtcerr.InvalidModificationError{
+				Err: fmt.Errorf("Invalid SDP type supplied to SetLocalDescription(): %s", desc.Type),
+			}
+		}
+	}
+
+	// TODO: Initiate ICE candidate gathering?
+
+	desc.parsed = &sdp.SessionDescription{}
+	if err := desc.parsed.Unmarshal(desc.Sdp); err != nil {
+		return err
+	}
+	return pc.setDescription(&desc, rtcStateChangeOpSetLocal)
+}
 
 // LocalDescription returns PendingLocalDescription if it is not null and
 // otherwise it returns CurrentLocalDescription. This property is used to
@@ -434,8 +706,20 @@ func (pc *RTCPeerConnection) LocalDescription() *RTCSessionDescription {
 
 // SetRemoteDescription sets the SessionDescription of the remote peer
 func (pc *RTCPeerConnection) SetRemoteDescription(desc RTCSessionDescription) error {
+	// FIXME: Remove this when renegotiation is supported
 	if pc.CurrentRemoteDescription != nil {
 		return errors.Errorf("remoteDescription is already defined, SetRemoteDescription can only be called once")
+	}
+	if pc.isClosed {
+		return &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
+	}
+
+	desc.parsed = &sdp.SessionDescription{}
+	if err := desc.parsed.Unmarshal(desc.Sdp); err != nil {
+		return err
+	}
+	if err := pc.setDescription(&desc, rtcStateChangeOpSetRemote); err != nil {
+		return err
 	}
 
 	weOffer := true
@@ -445,19 +729,21 @@ func (pc *RTCPeerConnection) SetRemoteDescription(desc RTCSessionDescription) er
 		weOffer = false
 	}
 
-	pc.CurrentRemoteDescription = &desc
-	pc.CurrentRemoteDescription.parsed = &sdp.SessionDescription{}
-	if err := pc.CurrentRemoteDescription.parsed.Unmarshal(pc.CurrentRemoteDescription.Sdp); err != nil {
-		return err
-	}
-
-	for _, m := range pc.CurrentRemoteDescription.parsed.MediaDescriptions {
+	for _, m := range pc.RemoteDescription().parsed.MediaDescriptions {
 		for _, a := range m.Attributes {
-			if strings.HasPrefix(*a.String(), "candidate") {
-				if c := sdp.ICECandidateUnmarshal(*a.String()); c != nil {
-					pc.networkManager.IceAgent.AddRemoteCandidate(c)
-				} else {
-					fmt.Printf("Tried to parse ICE candidate, but failed %s ", a)
+			if a.IsICECandidate() {
+				sdpCandidate, err := a.ToICECandidate()
+				if err != nil {
+					return err
+				}
+
+				candidate, err := newRTCIceCandidateFromSDP(sdpCandidate)
+				if err != nil {
+					return err
+				}
+
+				if err = pc.iceTransport.AddRemoteCandidate(candidate); err != nil {
+					return err
 				}
 			} else if strings.HasPrefix(*a.String(), "ice-ufrag") {
 				remoteUfrag = (*a.String())[len("ice-ufrag:"):]
@@ -466,7 +752,249 @@ func (pc *RTCPeerConnection) SetRemoteDescription(desc RTCSessionDescription) er
 			}
 		}
 	}
-	return pc.networkManager.Start(weOffer, remoteUfrag, remotePwd)
+
+	fingerprint, ok := desc.parsed.Attribute("fingerprint")
+	if !ok {
+		fingerprint, ok = desc.parsed.MediaDescriptions[0].Attribute("fingerprint")
+		if !ok {
+			return errors.New("could not find fingerprint")
+		}
+	}
+	var fingerprintHash string
+	parts := strings.Split(fingerprint, " ")
+	if len(parts) != 2 {
+		return errors.New("invalid fingerprint")
+	}
+	fingerprint = parts[1]
+	fingerprintHash = parts[0]
+
+	// Create the SCTP transport
+	sctp := pc.api.NewRTCSctpTransport(pc.dtlsTransport)
+	pc.sctpTransport = sctp
+
+	// Wire up the on datachannel handler
+	sctp.OnDataChannel(func(d *RTCDataChannel) {
+		pc.RLock()
+		hdlr := pc.onDataChannelHandler
+		pc.RUnlock()
+		if hdlr != nil {
+			hdlr(d)
+		}
+	})
+
+	go func() {
+		// Star the networking in a new routine since it will block until
+		// the connection is actually established.
+
+		// Start the ice transport
+		iceRole := RTCIceRoleControlled
+		if weOffer {
+			iceRole = RTCIceRoleControlling
+		}
+		err := pc.iceTransport.Start(
+			pc.iceGatherer,
+			RTCIceParameters{
+				UsernameFragment: remoteUfrag,
+				Password:         remotePwd,
+				IceLite:          false,
+			},
+			&iceRole,
+		)
+
+		if err != nil {
+			// TODO: Handle error
+			pcLog.Warnf("Failed to start manager: %s", err)
+			return
+		}
+
+		// Start the dtls transport
+		err = pc.dtlsTransport.Start(RTCDtlsParameters{
+			Role:         RTCDtlsRoleAuto,
+			Fingerprints: []RTCDtlsFingerprint{{Algorithm: fingerprintHash, Value: fingerprint}},
+		})
+		if err != nil {
+			// TODO: Handle error
+			pcLog.Warnf("Failed to start manager: %s", err)
+			return
+		}
+
+		if pc.onTrackHandler != nil {
+			pc.openSRTP()
+		} else {
+			pcLog.Warnf("OnTrack unset, unable to handle incoming media streams")
+		}
+
+		for _, tranceiver := range pc.rtpTransceivers {
+			if tranceiver.Sender != nil {
+				tranceiver.Sender.Send(RTCRtpSendParameters{
+					encodings: RTCRtpEncodingParameters{
+						RTCRtpCodingParameters{SSRC: tranceiver.Sender.Track.Ssrc, PayloadType: tranceiver.Sender.Track.PayloadType},
+					}})
+			}
+		}
+
+		go pc.drainSRTP()
+
+		// Start sctp
+		err = pc.sctpTransport.Start(RTCSctpCapabilities{
+			MaxMessageSize: 0,
+		})
+		if err != nil {
+			// TODO: Handle error
+			pcLog.Warnf("Failed to start SCTP: %s", err)
+			return
+		}
+
+		// Open data channels that where created before signaling
+		pc.openDataChannels()
+	}()
+
+	return nil
+}
+
+// openDataChannels opens the existing data channels
+func (pc *RTCPeerConnection) openDataChannels() {
+	for _, d := range pc.dataChannels {
+		err := d.open(pc.sctpTransport)
+		if err != nil {
+			pcLog.Warnf("failed to open data channel: %s", err)
+			continue
+		}
+	}
+}
+
+// openSRTP opens knows inbound SRTP streams from the RemoteDescription
+func (pc *RTCPeerConnection) openSRTP() {
+	incomingSSRCes := map[uint32]RTCRtpCodecType{}
+
+	for _, media := range pc.RemoteDescription().parsed.MediaDescriptions {
+		for _, attr := range media.Attributes {
+			var codecType RTCRtpCodecType
+			if media.MediaName.Media == "audio" {
+				codecType = RTCRtpCodecTypeAudio
+			} else if media.MediaName.Media == "video" {
+				codecType = RTCRtpCodecTypeVideo
+			} else {
+				continue
+			}
+
+			if attr.Key == sdp.AttrKeySsrc {
+				ssrc, err := strconv.ParseUint(strings.Split(attr.Value, " ")[0], 10, 32)
+				if err != nil {
+					pcLog.Warnf("Failed to parse SSRC: %v", err)
+					continue
+				}
+
+				incomingSSRCes[uint32(ssrc)] = codecType
+			}
+		}
+	}
+
+	for i := range incomingSSRCes {
+		go func(ssrc uint32, codecType RTCRtpCodecType) {
+			receiver := NewRTCRtpReceiver(codecType, pc.dtlsTransport)
+			<-receiver.Receive(RTCRtpReceiveParameters{
+				encodings: RTCRtpDecodingParameters{
+					RTCRtpCodingParameters{SSRC: ssrc},
+				}})
+
+			sdpCodec, err := pc.CurrentLocalDescription.parsed.GetCodecForPayloadType(receiver.Track.PayloadType)
+			if err != nil {
+				pcLog.Warnf("no codec could be found in RemoteDescription for payloadType %d", receiver.Track.PayloadType)
+				return
+			}
+
+			codec, err := pc.api.mediaEngine.getCodecSDP(sdpCodec)
+			if err != nil {
+				pcLog.Warnf("codec %s in not registered", sdpCodec)
+				return
+			}
+
+			receiver.Track.Kind = codec.Type
+			receiver.Track.Codec = codec
+			pc.newRTCRtpTransceiver(
+				receiver,
+				nil,
+				RTCRtpTransceiverDirectionRecvonly,
+			)
+
+			pc.onTrack(receiver.Track)
+		}(i, incomingSSRCes[i])
+	}
+
+}
+
+// drainSRTP pulls and discards RTP/RTCP packets that don't match any SRTP
+// These could be sent to the user, but right now we don't provide an API
+// to distribute orphaned RTCP messages. This is needed to make sure we don't block
+// and provides useful debugging messages
+func (pc *RTCPeerConnection) drainSRTP() {
+	go func() {
+		for {
+			srtpSession, err := pc.dtlsTransport.getSRTPSession()
+			if err != nil {
+				pcLog.Warnf("drainSRTP failed to open SrtpSession: %v", err)
+				return
+			}
+
+			r, ssrc, err := srtpSession.AcceptStream()
+			if err != nil {
+				pcLog.Warnf("Failed to accept RTP %v \n", err)
+				return
+			}
+
+			go func() {
+				rtpBuf := make([]byte, receiveMTU)
+				rtpPacket := &rtp.Packet{}
+
+				for {
+					i, err := r.Read(rtpBuf)
+					if err != nil {
+						pcLog.Warnf("Failed to read, drainSRTP done for: %v %d \n", err, ssrc)
+						return
+					}
+
+					if err := rtpPacket.Unmarshal(rtpBuf[:i]); err != nil {
+						pcLog.Warnf("Failed to unmarshal RTP packet, discarding: %v \n", err)
+						continue
+					}
+					pcLog.Debugf("got RTP: %+v", rtpPacket)
+				}
+			}()
+		}
+	}()
+
+	for {
+		srtcpSession, err := pc.dtlsTransport.getSRTCPSession()
+		if err != nil {
+			pcLog.Warnf("drainSRTP failed to open SrtcpSession: %v", err)
+			return
+		}
+
+		r, ssrc, err := srtcpSession.AcceptStream()
+		if err != nil {
+			pcLog.Warnf("Failed to accept RTCP %v \n", err)
+			return
+		}
+
+		go func() {
+			rtcpBuf := make([]byte, receiveMTU)
+			for {
+				i, err := r.Read(rtcpBuf)
+				if err != nil {
+					pcLog.Warnf("Failed to read, drainSRTCP done for: %v %d \n", err, ssrc)
+					return
+				}
+
+				rtcpPacket, _, err := rtcp.Unmarshal(rtcpBuf[:i])
+				if err != nil {
+					pcLog.Warnf("Failed to unmarshal RTCP packet, discarding: %v \n", err)
+					continue
+				}
+				pcLog.Debugf("got RTCP: %+v", rtcpPacket)
+			}
+		}()
+	}
 }
 
 // RemoteDescription returns PendingRemoteDescription if it is not null and
@@ -483,11 +1011,25 @@ func (pc *RTCPeerConnection) RemoteDescription() *RTCSessionDescription {
 // AddIceCandidate accepts an ICE candidate string and adds it
 // to the existing set of candidates
 func (pc *RTCPeerConnection) AddIceCandidate(s string) error {
-	if c := sdp.ICECandidateUnmarshal(s); c != nil {
-		pc.networkManager.IceAgent.AddRemoteCandidate(c)
-		return nil
+	// TODO: AddIceCandidate should take RTCIceCandidateInit
+	if pc.RemoteDescription() == nil {
+		return &rtcerr.InvalidStateError{Err: ErrNoRemoteDescription}
 	}
-	return fmt.Errorf("Unable to parse %q as remote candidate", s)
+
+	s = strings.TrimPrefix(s, "candidate:")
+
+	attribute := sdp.NewAttribute("candidate", s)
+	sdpCandidate, err := attribute.ToICECandidate()
+	if err != nil {
+		return err
+	}
+
+	candidate, err := newRTCIceCandidateFromSDP(sdpCandidate)
+	if err != nil {
+		return err
+	}
+
+	return pc.iceTransport.AddRemoteCandidate(candidate)
 }
 
 // ------------------------------------------------------------------------
@@ -550,10 +1092,9 @@ func (pc *RTCPeerConnection) AddTrack(track *RTCTrack) (*RTCRtpSender, error) {
 			return nil, err
 		}
 	} else {
-		var receiver *RTCRtpReceiver
-		sender := newRTCRtpSender(track)
+		sender := NewRTCRtpSender(track, pc.dtlsTransport)
 		transceiver = pc.newRTCRtpTransceiver(
-			receiver,
+			nil,
 			sender,
 			RTCRtpTransceiverDirectionSendonly,
 		)
@@ -577,7 +1118,7 @@ func (pc *RTCPeerConnection) AddTrack(track *RTCTrack) (*RTCRtpSender, error) {
 // ------------------------------------------------------------------------
 
 // CreateDataChannel creates a new RTCDataChannel object with the given label
-// and optitional RTCDataChannelInit used to configure properties of the
+// and optional RTCDataChannelInit used to configure properties of the
 // underlying channel such as data reliability.
 func (pc *RTCPeerConnection) CreateDataChannel(label string, options *RTCDataChannelInit) (*RTCDataChannel, error) {
 	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #2)
@@ -585,140 +1126,150 @@ func (pc *RTCPeerConnection) CreateDataChannel(label string, options *RTCDataCha
 		return nil, &rtcerr.InvalidStateError{Err: ErrConnectionClosed}
 	}
 
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #5)
-	if len(label) > 65535 {
-		return nil, &rtcerr.TypeError{Err: ErrStringSizeLimit}
+	// TODO: Add additional options once implemented. RTCDataChannelInit
+	// implements all options. RTCDataChannelParameters implements the
+	// options that actually have an effect at this point.
+	params := &RTCDataChannelParameters{
+		Label: label,
 	}
-
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #3)
-	// Some variables defined explicitly despite their implicit zero values to
-	// allow better readability to understand what is happening. Additionally,
-	// some members are set to a non zero value default due to the default
-	// definitions in https://w3c.github.io/webrtc-pc/#dom-rtcdatachannelinit
-	// which are later overwriten by the options if any were specified.
-	channel := RTCDataChannel{
-		rtcPeerConnection: pc,
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #4)
-		Label:             label,
-		Ordered:           true,
-		MaxPacketLifeTime: nil,
-		MaxRetransmits:    nil,
-		Protocol:          "",
-		Negotiated:        false,
-		ID:                nil,
-		Priority:          RTCPriorityTypeLow,
-		// https://w3c.github.io/webrtc-pc/#dfn-create-an-rtcdatachannel (Step #2)
-		ReadyState: RTCDataChannelStateConnecting,
-		// https://w3c.github.io/webrtc-pc/#dfn-create-an-rtcdatachannel (Step #3)
-		BufferedAmount: 0,
-	}
-
-	if options != nil {
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #7)
-		if options.MaxPacketLifeTime != nil {
-			channel.MaxPacketLifeTime = options.MaxPacketLifeTime
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #8)
-		if options.MaxRetransmits != nil {
-			channel.MaxRetransmits = options.MaxRetransmits
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #9)
-		if options.Ordered != nil {
-			channel.Ordered = *options.Ordered
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #10)
-		if options.Protocol != nil {
-			channel.Protocol = *options.Protocol
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #12)
-		if options.Negotiated != nil {
-			channel.Negotiated = *options.Negotiated
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #13)
-		if options.ID != nil && channel.Negotiated {
-			channel.ID = options.ID
-		}
-
-		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #15)
-		if options.Priority != nil {
-			channel.Priority = *options.Priority
-		}
-	}
-
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #11)
-	if len(channel.Protocol) > 65535 {
-		return nil, &rtcerr.TypeError{Err: ErrStringSizeLimit}
-	}
-
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #14)
-	if channel.Negotiated && channel.ID == nil {
-		return nil, &rtcerr.TypeError{Err: ErrNegotiatedWithoutID}
-	}
-
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #16)
-	if channel.MaxPacketLifeTime != nil && channel.MaxRetransmits != nil {
-		return nil, &rtcerr.TypeError{Err: ErrRetransmitsOrPacketLifeTime}
-	}
-
-	// FIXME https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-createdatachannel (Step #17)
-
-	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #20)
-	channel.Transport = pc.sctpTransport
 
 	// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #19)
-	if channel.ID == nil {
+	if options == nil ||
+		options.ID == nil {
 		var err error
-		if channel.ID, err = pc.generateDataChannelID(true); err != nil {
+		if params.ID, err = pc.generateDataChannelID(true); err != nil {
 			return nil, err
 		}
-		// if err := channel.generateID(); err != nil {
-		// 	return nil, err
-		// }
+	} else {
+		params.ID = *options.ID
 	}
 
-	// // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #18)
-	if *channel.ID > 65534 {
-		return nil, &rtcerr.TypeError{Err: ErrMaxDataChannelID}
-	}
+	// TODO: Re-enable validation of the parameters once they are implemented.
+	/*
+		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #3)
+		// Some variables defined explicitly despite their implicit zero values to
+		// allow better readability to understand what is happening. Additionally,
+		// some members are set to a non zero value default due to the default
+		// definitions in https://w3c.github.io/webrtc-pc/#dom-rtcdatachannelinit
+		// which are later overwriten by the options if any were specified.
+		channel := RTCDataChannel{
+			rtcPeerConnection: pc,
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #4)
+			Label:             label,
+			Ordered:           true,
+			MaxPacketLifeTime: nil,
+			MaxRetransmits:    nil,
+			Protocol:          "",
+			Negotiated:        false,
+			ID:                nil,
+			Priority:          RTCPriorityTypeLow,
+			// https://w3c.github.io/webrtc-pc/#dfn-create-an-rtcdatachannel (Step #3)
+			BufferedAmount: 0,
+		}
 
-	if pc.sctpTransport.State == RTCSctpTransportStateConnected &&
-		*channel.ID >= *pc.sctpTransport.MaxChannels {
-		return nil, &rtcerr.OperationError{Err: ErrMaxDataChannelID}
+		if options != nil {
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #7)
+			if options.MaxPacketLifeTime != nil {
+				channel.MaxPacketLifeTime = options.MaxPacketLifeTime
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #8)
+			if options.MaxRetransmits != nil {
+				channel.MaxRetransmits = options.MaxRetransmits
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #9)
+			if options.Ordered != nil {
+				channel.Ordered = *options.Ordered
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #10)
+			if options.Protocol != nil {
+				channel.Protocol = *options.Protocol
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-da	ta-api (Step #12)
+			if options.Negotiated != nil {
+				channel.Negotiated = *options.Negotiated
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #13)
+			if options.ID != nil && channel.Negotiated {
+				channel.ID = options.ID
+			}
+
+			// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #15)
+			if options.Priority != nil {
+				channel.Priority = *options.Priority
+			}
+		}
+
+		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #11)
+		if len(channel.Protocol) > 65535 {
+			return nil, &rtcerr.TypeError{Err: ErrStringSizeLimit}
+		}
+
+		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #14)
+		if channel.Negotiated && channel.ID == nil {
+			return nil, &rtcerr.TypeError{Err: ErrNegotiatedWithoutID}
+		}
+
+		// https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #16)
+		if channel.MaxPacketLifeTime != nil && channel.MaxRetransmits != nil {
+			return nil, &rtcerr.TypeError{Err: ErrRetransmitsOrPacketLifeTime}
+		}
+
+		// FIXME https://w3c.github.io/webrtc-pc/#dom-rtcpeerconnection-createdatachannel (Step #17)
+
+
+		// // https://w3c.github.io/webrtc-pc/#peer-to-peer-data-api (Step #18)
+		if *channel.ID > 65534 {
+			return nil, &rtcerr.TypeError{Err: ErrMaxDataChannelID}
+		}
+
+		if pc.sctpTransport.State == RTCSctpTransportStateConnected &&
+			*channel.ID >= *pc.sctpTransport.MaxChannels {
+			return nil, &rtcerr.OperationError{Err: ErrMaxDataChannelID}
+		}
+	*/
+
+	d, err := pc.api.newRTCDataChannel(params)
+	if err != nil {
+		return nil, err
 	}
 
 	// Remember datachannel
-	pc.dataChannels[*channel.ID] = &channel
+	pc.dataChannels[params.ID] = d
 
-	// Send opening message
-	// pc.networkManager.SendOpenChannelMessage(id, label)
+	// Open if networking already started
+	if pc.sctpTransport != nil {
+		err = d.open(pc.sctpTransport)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	return &channel, nil
+	return d, nil
 }
 
-func (pc *RTCPeerConnection) generateDataChannelID(client bool) (*uint16, error) {
+func (pc *RTCPeerConnection) generateDataChannelID(client bool) (uint16, error) {
 	var id uint16
 	if !client {
 		id++
 	}
 
-	for ; id < *pc.sctpTransport.MaxChannels-1; id += 2 {
+	max := sctpMaxChannels
+	if pc.sctpTransport != nil {
+		max = *pc.sctpTransport.MaxChannels
+	}
+
+	for ; id < max-1; id += 2 {
 		_, ok := pc.dataChannels[id]
 		if !ok {
-			return &id, nil
+			return id, nil
 		}
 	}
-	return nil, &rtcerr.OperationError{Err: ErrMaxDataChannelID}
-}
-
-// SetMediaEngine allows overwriting the default media engine used by the RTCPeerConnection
-// This enables RTCPeerConnection with support for different codecs
-func (pc *RTCPeerConnection) SetMediaEngine(m *MediaEngine) {
-	pc.mediaEngine = m
+	return 0, &rtcerr.OperationError{Err: ErrMaxDataChannelID}
 }
 
 // SetIdentityProvider is used to configure an identity provider to generate identity assertions
@@ -733,7 +1284,20 @@ func (pc *RTCPeerConnection) SendRTCP(pkt rtcp.Packet) error {
 	if err != nil {
 		return err
 	}
-	pc.networkManager.SendRTCP(raw)
+
+	srtcpSession, err := pc.dtlsTransport.getSRTCPSession()
+	if err != nil {
+		return nil // TODO SendRTCP before would gracefully discard packets until ready
+	}
+
+	writeStream, err := srtcpSession.OpenWriteStream()
+	if err != nil {
+		return fmt.Errorf("SendRTCP failed to open WriteStream: %v", err)
+	}
+
+	if _, err := writeStream.Write(raw); err != nil {
+		return fmt.Errorf("SendRTCP failed to write: %v", err)
+	}
 	return nil
 }
 
@@ -744,8 +1308,6 @@ func (pc *RTCPeerConnection) Close() error {
 		return nil
 	}
 
-	pc.networkManager.Close()
-
 	// https://www.w3.org/TR/webrtc/#dom-rtcpeerconnection-close (step #3)
 	pc.isClosed = true
 
@@ -754,121 +1316,72 @@ func (pc *RTCPeerConnection) Close() error {
 
 	// https://www.w3.org/TR/webrtc/#dom-rtcpeerconnection-close (step #11)
 	// pc.IceConnectionState = RTCIceConnectionStateClosed
-	pc.IceConnectionState = ice.ConnectionStateClosed // FIXME REMOVE
+	pc.iceStateChange(ice.ConnectionStateClosed) // FIXME REMOVE
 
 	// https://www.w3.org/TR/webrtc/#dom-rtcpeerconnection-close (step #12)
 	pc.ConnectionState = RTCPeerConnectionStateClosed
 
-	return nil
+	// Try closing everything and collect the errors
+	var closeErrs []error
+
+	// Shutdown strategy:
+	// 1. All Conn close by closing their underlying Conn.
+	// 2. A Mux stops this chain. It won't close the underlying
+	//    Conn if one of the endpoints is closed down. To
+	//    continue the chain the Mux has to be closed.
+
+	if err := pc.dtlsTransport.Stop(); err != nil {
+		closeErrs = append(closeErrs, err)
+	}
+
+	for _, t := range pc.rtpTransceivers {
+		if err := t.Stop(); err != nil {
+			closeErrs = append(closeErrs, err)
+		}
+	}
+
+	if pc.sctpTransport != nil {
+		if err := pc.sctpTransport.Stop(); err != nil {
+			closeErrs = append(closeErrs, err)
+		}
+	}
+
+	// TODO: Close DTLS?
+
+	if pc.iceTransport != nil {
+		if err := pc.iceTransport.Stop(); err != nil {
+			closeErrs = append(closeErrs, err)
+		}
+	}
+
+	// TODO: Figure out stopping ICE transport & Gatherer independently.
+	// pc.iceGatherer()
+
+	return flattenErrs(closeErrs)
 }
 
-/* Everything below is private */
-func (pc *RTCPeerConnection) generateChannel(ssrc uint32, payloadType uint8) (buffers chan<- *rtp.Packet) {
-	if pc.OnTrack == nil {
+func flattenErrs(errs []error) error {
+	var errstrings []string
+
+	for _, err := range errs {
+		if err != nil {
+			errstrings = append(errstrings, err.Error())
+		}
+	}
+
+	if len(errstrings) == 0 {
 		return nil
 	}
 
-	sdpCodec, err := pc.CurrentLocalDescription.parsed.GetCodecForPayloadType(payloadType)
-	if err != nil {
-		fmt.Printf("No codec could be found in RemoteDescription for payloadType %d \n", payloadType)
-		return nil
-	}
-
-	codec, err := pc.mediaEngine.getCodecSDP(sdpCodec)
-	if err != nil {
-		fmt.Printf("Codec %s in not registered\n", sdpCodec)
-		return nil
-	}
-
-	bufferTransport := make(chan *rtp.Packet, 15)
-
-	track := &RTCTrack{
-		PayloadType: payloadType,
-		Kind:        codec.Type,
-		ID:          "0", // TODO extract from remoteDescription
-		Label:       "",  // TODO extract from remoteDescription
-		Ssrc:        ssrc,
-		Codec:       codec,
-		Packets:     bufferTransport,
-	}
-
-	// TODO: Register the receiving Track
-
-	go pc.OnTrack(track)
-	return bufferTransport
+	return fmt.Errorf(strings.Join(errstrings, "\n"))
 }
 
 func (pc *RTCPeerConnection) iceStateChange(newState ice.ConnectionState) {
 	pc.Lock()
-	defer pc.Unlock()
-
-	if pc.OnICEConnectionStateChange != nil {
-		pc.OnICEConnectionStateChange(newState)
-	}
 	pc.IceConnectionState = newState
-}
+	pc.Unlock()
 
-func (pc *RTCPeerConnection) dataChannelEventHandler(e network.DataChannelEvent) {
-	pc.Lock()
-	defer pc.Unlock()
-
-	switch event := e.(type) {
-	case *network.DataChannelCreated:
-		id := event.StreamIdentifier()
-		newDataChannel := &RTCDataChannel{ID: &id, Label: event.Label, rtcPeerConnection: pc, ReadyState: RTCDataChannelStateOpen}
-		pc.dataChannels[e.StreamIdentifier()] = newDataChannel
-		if pc.OnDataChannel != nil {
-			go func() {
-				pc.OnDataChannel(newDataChannel) // This should actually be called when processing the SDP answer.
-				if newDataChannel.OnOpen != nil {
-					go newDataChannel.doOnOpen()
-				}
-			}()
-		} else {
-			fmt.Println("OnDataChannel is unset, discarding message")
-		}
-	case *network.DataChannelMessage:
-		if datachannel, ok := pc.dataChannels[e.StreamIdentifier()]; ok {
-			datachannel.RLock()
-			defer datachannel.RUnlock()
-
-			if datachannel.Onmessage != nil {
-				go datachannel.Onmessage(event.Payload)
-			} else {
-				fmt.Printf("Onmessage has not been set for Datachannel %s %d \n", datachannel.Label, e.StreamIdentifier())
-			}
-		} else {
-			fmt.Printf("No datachannel found for streamIdentifier %d \n", e.StreamIdentifier())
-
-		}
-	case *network.DataChannelOpen:
-		for _, dc := range pc.dataChannels {
-			dc.Lock()
-			err := dc.sendOpenChannelMessage()
-			if err != nil {
-				fmt.Println("failed to send openchannel", err)
-				dc.Unlock()
-				continue
-			}
-			dc.ReadyState = RTCDataChannelStateOpen
-			dc.Unlock()
-
-			go dc.doOnOpen() // TODO: move to ChannelAck handling
-		}
-	default:
-		fmt.Printf("Unhandled DataChannelEvent %v \n", event)
-	}
-}
-
-func (pc *RTCPeerConnection) generateLocalCandidates() []string {
-	pc.networkManager.IceAgent.RLock()
-	defer pc.networkManager.IceAgent.RUnlock()
-
-	candidates := make([]string, 0)
-	for _, c := range pc.networkManager.IceAgent.LocalCandidates {
-		candidates = append(candidates, sdp.ICECandidateMarshal(c)...)
-	}
-	return candidates
+	pc.onICEConnectionStateChange(newState)
 }
 
 func localDirection(weSend bool, peerDirection RTCRtpTransceiverDirection) RTCRtpTransceiverDirection {
@@ -884,19 +1397,25 @@ func localDirection(weSend bool, peerDirection RTCRtpTransceiverDirection) RTCRt
 	return RTCRtpTransceiverDirectionInactive
 }
 
-func (pc *RTCPeerConnection) addRTPMediaSection(d *sdp.SessionDescription, codecType RTCRtpCodecType, midValue string, peerDirection RTCRtpTransceiverDirection, candidates []string, dtlsRole sdp.ConnectionRole) bool {
-	if codecs := pc.mediaEngine.getCodecsByKind(codecType); len(codecs) == 0 {
+func (pc *RTCPeerConnection) addFingerprint(d *sdp.SessionDescription) {
+	// TODO: Handle multiple certificates
+	for _, fingerprint := range pc.configuration.Certificates[0].GetFingerprints() {
+		d.WithFingerprint(fingerprint.Algorithm, strings.ToUpper(fingerprint.Value))
+	}
+}
+
+func (pc *RTCPeerConnection) addRTPMediaSection(d *sdp.SessionDescription, codecType RTCRtpCodecType, midValue string, iceParams RTCIceParameters, peerDirection RTCRtpTransceiverDirection, candidates []RTCIceCandidate, dtlsRole sdp.ConnectionRole) bool {
+	if codecs := pc.api.mediaEngine.getCodecsByKind(codecType); len(codecs) == 0 {
 		return false
 	}
-
 	media := sdp.NewJSEPMediaDescription(codecType.String(), []string{}).
 		WithValueAttribute(sdp.AttrKeyConnectionSetup, dtlsRole.String()). // TODO: Support other connection types
 		WithValueAttribute(sdp.AttrKeyMID, midValue).
-		WithICECredentials(pc.networkManager.IceAgent.LocalUfrag, pc.networkManager.IceAgent.LocalPwd).
+		WithICECredentials(iceParams.UsernameFragment, iceParams.Password).
 		WithPropertyAttribute(sdp.AttrKeyRtcpMux).  // TODO: support RTCP fallback
 		WithPropertyAttribute(sdp.AttrKeyRtcpRsize) // TODO: Support Reduced-Size RTCP?
 
-	for _, codec := range pc.mediaEngine.getCodecsByKind(codecType) {
+	for _, codec := range pc.api.mediaEngine.getCodecsByKind(codecType) {
 		media.WithCodec(codec.PayloadType, codec.Name, codec.ClockRate, codec.Channels, codec.SdpFmtpLine)
 	}
 
@@ -914,20 +1433,25 @@ func (pc *RTCPeerConnection) addRTPMediaSection(d *sdp.SessionDescription, codec
 	media = media.WithPropertyAttribute(localDirection(weSend, peerDirection).String())
 
 	for _, c := range candidates {
-		media.WithCandidate(c)
+		sdpCandidate := c.toSDP()
+		sdpCandidate.ExtensionAttributes = append(sdpCandidate.ExtensionAttributes, sdp.ICECandidateAttribute{Key: "generation", Value: "0"})
+		sdpCandidate.Component = 1
+		media.WithICECandidate(sdpCandidate)
+		sdpCandidate.Component = 2
+		media.WithICECandidate(sdpCandidate)
 	}
 	media.WithPropertyAttribute("end-of-candidates")
 	d.WithMedia(media)
 	return true
 }
 
-func (pc *RTCPeerConnection) addDataMediaSection(d *sdp.SessionDescription, midValue string, candidates []string, dtlsRole sdp.ConnectionRole) {
+func (pc *RTCPeerConnection) addDataMediaSection(d *sdp.SessionDescription, midValue string, iceParams RTCIceParameters, candidates []RTCIceCandidate, dtlsRole sdp.ConnectionRole) {
 	media := (&sdp.MediaDescription{
 		MediaName: sdp.MediaName{
 			Media:   "application",
 			Port:    sdp.RangedPort{Value: 9},
 			Protos:  []string{"DTLS", "SCTP"},
-			Formats: []int{5000},
+			Formats: []string{"5000"},
 		},
 		ConnectionInformation: &sdp.ConnectionInformation{
 			NetworkType: "IN",
@@ -941,95 +1465,47 @@ func (pc *RTCPeerConnection) addDataMediaSection(d *sdp.SessionDescription, midV
 		WithValueAttribute(sdp.AttrKeyMID, midValue).
 		WithPropertyAttribute(RTCRtpTransceiverDirectionSendrecv.String()).
 		WithPropertyAttribute("sctpmap:5000 webrtc-datachannel 1024").
-		WithICECredentials(pc.networkManager.IceAgent.LocalUfrag, pc.networkManager.IceAgent.LocalPwd)
+		WithICECredentials(iceParams.UsernameFragment, iceParams.Password)
 
 	for _, c := range candidates {
-		media.WithCandidate(c)
+		sdpCandidate := c.toSDP()
+		sdpCandidate.ExtensionAttributes = append(sdpCandidate.ExtensionAttributes, sdp.ICECandidateAttribute{Key: "generation", Value: "0"})
+		sdpCandidate.Component = 1
+		media.WithICECandidate(sdpCandidate)
+		sdpCandidate.Component = 2
+		media.WithICECandidate(sdpCandidate)
 	}
 	media.WithPropertyAttribute("end-of-candidates")
 
 	d.WithMedia(media)
 }
 
-func (pc *RTCPeerConnection) newRTCTrack(payloadType uint8, ssrc uint32, id, label string) (*RTCTrack, error) {
-	codec, err := pc.mediaEngine.getCodec(payloadType)
+// NewRawRTPTrack Creates a new RTCTrack
+//
+// See NewRTCSampleTrack for documentation
+func (pc *RTCPeerConnection) NewRawRTPTrack(payloadType uint8, ssrc uint32, id, label string) (*RTCTrack, error) {
+	codec, err := pc.api.mediaEngine.getCodec(payloadType)
 	if err != nil {
 		return nil, err
-	}
-
-	if codec.Payloader == nil {
+	} else if codec.Payloader == nil {
 		return nil, errors.New("codec payloader not set")
 	}
 
-	trackInput := make(chan media.RTCSample, 15) // Is the buffering needed?
-	rawPackets := make(chan *rtp.Packet)
-	if ssrc == 0 {
-		buf := make([]byte, 4)
-		_, err = rand.Read(buf)
-		if err != nil {
-			return nil, errors.New("failed to generate random value")
-		}
-		ssrc = binary.LittleEndian.Uint32(buf)
-
-		go func() {
-			packetizer := rtp.NewPacketizer(
-				1400,
-				payloadType,
-				ssrc,
-				codec.Payloader,
-				rtp.NewRandomSequencer(),
-				codec.ClockRate,
-			)
-
-			for {
-				in := <-trackInput
-				packets := packetizer.Packetize(in.Data, in.Samples)
-				for i, p := range packets {
-					pc.networkManager.SendRTP(p)
-				}
-			}
-		}()
-		close(rawPackets)
-	} else {
-		// If SSRC is not 0, then we are working with an established RTP stream
-		// and need to accept raw RTP packets for forwarding.
-		go func() {
-			for {
-				p := <-rawPackets
-				pc.networkManager.SendRTP(p)
-			}
-		}()
-		close(trackInput)
-	}
-
-	t := &RTCTrack{
-		PayloadType: payloadType,
-		Kind:        codec.Type,
-		ID:          id,
-		Label:       label,
-		Ssrc:        ssrc,
-		Codec:       codec,
-		Samples:     trackInput,
-		RawRTP:      rawPackets,
-	}
-
-	return t, nil
+	return NewRawRTPTrack(payloadType, ssrc, id, label, codec)
 }
 
-// NewRawRTPTrack initializes a new *RTCTrack configured to accept raw *rtp.Packet
+// NewRTCSampleTrack Creates a new RTCTrack
 //
-// NB: If the source RTP stream is being broadcast to multiple tracks, each track
-// must receive its own copies of the source packets in order to avoid packet corruption.
-func (pc *RTCPeerConnection) NewRawRTPTrack(payloadType uint8, ssrc uint32, id, label string) (*RTCTrack, error) {
-	if ssrc == 0 {
-		return nil, errors.New("SSRC supplied to NewRawRTPTrack() must be non-zero")
-	}
-	return pc.newRTCTrack(payloadType, ssrc, id, label)
-}
-
-// NewRTCSampleTrack initializes a new *RTCTrack configured to accept media.RTCSample
+// See NewRTCSampleTrack for documentation
 func (pc *RTCPeerConnection) NewRTCSampleTrack(payloadType uint8, id, label string) (*RTCTrack, error) {
-	return pc.newRTCTrack(payloadType, 0, id, label)
+	codec, err := pc.api.mediaEngine.getCodec(payloadType)
+	if err != nil {
+		return nil, err
+	} else if codec.Payloader == nil {
+		return nil, errors.New("codec payloader not set")
+	}
+
+	return NewRTCSampleTrack(payloadType, id, label, codec)
 }
 
 // NewRTCTrack is used to create a new RTCTrack
@@ -1050,6 +1526,8 @@ func (pc *RTCPeerConnection) newRTCRtpTransceiver(
 		Sender:    sender,
 		Direction: direction,
 	}
+	pc.Lock()
+	defer pc.Unlock()
 	pc.rtpTransceivers = append(pc.rtpTransceivers, t)
 	return t
 }

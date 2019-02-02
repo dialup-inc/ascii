@@ -12,6 +12,10 @@ var (
 	// has already been closed.
 	ErrConnectionClosed = errors.New("connection closed")
 
+	// ErrDataChannelNotOpen indicates an operation executed when the data
+	// channel is not (yet) open.
+	ErrDataChannelNotOpen = errors.New("data channel not open")
+
 	// ErrCertificateExpired indicates that an x509 certificate has expired.
 	ErrCertificateExpired = errors.New("x509Cert expired")
 
@@ -24,7 +28,7 @@ var (
 	ErrTurnCredencials = errors.New("invalid turn server credentials")
 
 	// ErrExistingTrack indicates that a track already exists.
-	ErrExistingTrack = errors.New("track aready exists")
+	ErrExistingTrack = errors.New("track already exists")
 
 	// ErrPrivateKeyType indicates that a particular private key encryption
 	// chosen to generate a certificate is not supported.
@@ -68,4 +72,11 @@ var (
 	// set together. Such configuration is not supported by the specification
 	// and is mutually exclusive.
 	ErrRetransmitsOrPacketLifeTime = errors.New("both MaxPacketLifeTime and MaxRetransmits was set")
+
+	// ErrCodecNotFound is returned when a codec search to the Media Engine fails
+	ErrCodecNotFound = errors.New("Codec not found")
+
+	// ErrNoRemoteDescription indicates that an operation was rejected because
+	// the remote description is not set
+	ErrNoRemoteDescription = errors.New("remote description is not set")
 )

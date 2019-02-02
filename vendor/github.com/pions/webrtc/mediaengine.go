@@ -3,42 +3,19 @@ package webrtc
 import (
 	"strconv"
 
-	"github.com/pions/webrtc/internal/sdp"
-	"github.com/pions/webrtc/pkg/rtp"
-	"github.com/pions/webrtc/pkg/rtp/codecs"
-	"github.com/pkg/errors"
+	"github.com/pions/rtp"
+	"github.com/pions/rtp/codecs"
+	"github.com/pions/sdp"
 )
-
-// RegisterCodec is used to register a codec with the DefaultMediaEngine
-func RegisterCodec(codec *RTCRtpCodec) {
-	DefaultMediaEngine.RegisterCodec(codec)
-}
-
-// TODO: Phase out DefaultPayloadTypes in favor or dynamic assignment in 96-127 range
 
 // PayloadTypes for the default codecs
 const (
+	DefaultPayloadTypeG722 = 9
 	DefaultPayloadTypeOpus = 111
 	DefaultPayloadTypeVP8  = 96
 	DefaultPayloadTypeVP9  = 98
 	DefaultPayloadTypeH264 = 100
 )
-
-// RegisterDefaultCodecs is a helper that registers the default codecs supported by pions-webrtc
-func RegisterDefaultCodecs() {
-	RegisterCodec(NewRTCRtpOpusCodec(DefaultPayloadTypeOpus, 48000, 2))
-	RegisterCodec(NewRTCRtpVP8Codec(DefaultPayloadTypeVP8, 90000))
-	RegisterCodec(NewRTCRtpH264Codec(DefaultPayloadTypeH264, 90000))
-	RegisterCodec(NewRTCRtpVP9Codec(DefaultPayloadTypeVP9, 90000))
-}
-
-// DefaultMediaEngine is the default MediaEngine used by RTCPeerConnections
-var DefaultMediaEngine = NewMediaEngine()
-
-// NewMediaEngine creates a new MediaEngine
-func NewMediaEngine() *MediaEngine {
-	return &MediaEngine{}
-}
 
 // MediaEngine defines the codecs supported by a RTCPeerConnection
 type MediaEngine struct {
@@ -52,13 +29,22 @@ func (m *MediaEngine) RegisterCodec(codec *RTCRtpCodec) uint8 {
 	return codec.PayloadType
 }
 
+// RegisterDefaultCodecs is a helper that registers the default codecs supported by pions-webrtc
+func (m *MediaEngine) RegisterDefaultCodecs() {
+	m.RegisterCodec(NewRTCRtpOpusCodec(DefaultPayloadTypeOpus, 48000, 2))
+	m.RegisterCodec(NewRTCRtpG722Codec(DefaultPayloadTypeG722, 8000))
+	m.RegisterCodec(NewRTCRtpVP8Codec(DefaultPayloadTypeVP8, 90000))
+	m.RegisterCodec(NewRTCRtpH264Codec(DefaultPayloadTypeH264, 90000))
+	m.RegisterCodec(NewRTCRtpVP9Codec(DefaultPayloadTypeVP9, 90000))
+}
+
 func (m *MediaEngine) getCodec(payloadType uint8) (*RTCRtpCodec, error) {
 	for _, codec := range m.codecs {
 		if codec.PayloadType == payloadType {
 			return codec, nil
 		}
 	}
-	return nil, errors.New("Codec not found")
+	return nil, ErrCodecNotFound
 }
 
 func (m *MediaEngine) getCodecSDP(sdpCodec sdp.Codec) (*RTCRtpCodec, error) {
@@ -71,7 +57,7 @@ func (m *MediaEngine) getCodecSDP(sdpCodec sdp.Codec) (*RTCRtpCodec, error) {
 			return codec, nil
 		}
 	}
-	return nil, errors.New("Codec not found")
+	return nil, ErrCodecNotFound
 }
 
 func (m *MediaEngine) getCodecsByKind(kind RTCRtpCodecType) []*RTCRtpCodec {
@@ -86,11 +72,24 @@ func (m *MediaEngine) getCodecsByKind(kind RTCRtpCodecType) []*RTCRtpCodec {
 
 // Names for the default codecs supported by pions-webrtc
 const (
+	G722 = "G722"
 	Opus = "opus"
 	VP8  = "VP8"
 	VP9  = "VP9"
 	H264 = "H264"
 )
+
+// NewRTCRtpG722Codec is a helper to create a G722 codec
+func NewRTCRtpG722Codec(payloadType uint8, clockrate uint32) *RTCRtpCodec {
+	c := NewRTCRtpCodec(RTCRtpCodecTypeAudio,
+		G722,
+		clockrate,
+		0,
+		"",
+		payloadType,
+		&codecs.G722Payloader{})
+	return c
+}
 
 // NewRTCRtpOpusCodec is a helper to create an Opus codec
 func NewRTCRtpOpusCodec(payloadType uint8, clockrate uint32, channels uint16) *RTCRtpCodec {

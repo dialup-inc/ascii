@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/maxhawkins/asciirtc/capture"
+	"github.com/pions/rtcp"
+	"github.com/pions/rtp"
+	"github.com/pions/rtp/codecs"
 	"github.com/pions/webrtc"
 	"github.com/pions/webrtc/pkg/ice"
 	"github.com/pions/webrtc/pkg/media"
-	"github.com/pions/webrtc/pkg/rtcp"
-	"github.com/pions/webrtc/pkg/rtp"
-	"github.com/pions/webrtc/pkg/rtp/codecs"
 )
 
 type Demo struct {
@@ -170,10 +170,12 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 			pay := make([]byte, len(newPkt.Payload))
 			copy(pay, newPkt.Payload)
 			newPkt = &rtp.Packet{
-				Marker:         newPkt.Marker,
-				Timestamp:      newPkt.Timestamp,
-				SequenceNumber: newPkt.SequenceNumber,
-				Payload:        pay,
+				Header: rtp.Header{
+					Marker:         newPkt.Marker,
+					Timestamp:      newPkt.Timestamp,
+					SequenceNumber: newPkt.SequenceNumber,
+				},
+				Payload: pay,
 			}
 
 			d.jitter.Push(newPkt)
