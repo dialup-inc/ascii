@@ -153,7 +153,11 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 		fmt.Println(err)
 		return
 	}
-	defer capture.StopDecode()
+	defer func() {
+		if err := capture.StopDecode(); err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	builder := samplebuilder.New(256, &codecs.VP8Packet{})
 	for j := 0; ; j++ {
