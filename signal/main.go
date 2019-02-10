@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -9,39 +8,61 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type SignalMsg struct {
+const roomName = "seanTest"
+
+type signalMsg struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
-func main() {
-	var upgrader websocket.Upgrader
+var roomsMu sync.Mutex
+var rooms = map[string]chan signalMsg{}
 
-	var busMu sync.Mutex
-	bus := make(map[int]chan *SignalMsg)
-
-	var lobbyMu sync.Mutex
-	lobby := -1
-	lobbyCh := make(chan int)
-
-	match := func(id int) (match int, first bool) {
-		lobbyMu.Lock()
-		if lobby < 0 {
-			lobby = id
-			lobbyMu.Unlock()
-			match = <-lobbyCh
-			first = false
-		} else {
-			match = lobby
-			lobby = -1
-			lobbyMu.Unlock()
-			lobbyCh <- id
-			first = true
-		}
-
-		return match, first
+func generateOffer(comChan chan signalMsg, conn *websocket.Conn) {
+	if err := conn.WriteJSON(signalMsg{
+		Type: "requestOffer",
+	}); err != nil {
+		log.Println("write:", err)
+		return
 	}
 
+	offerMsg := &signalMsg{}
+	if err := conn.ReadJSON(offerMsg); err != nil {
+		log.Println("read:", err)
+		return
+	} else if offerMsg.Type != "offer" {
+		log.Println("expected offer from 'requestOffer' got:", offerMsg.Type)
+		return
+	}
+	comChan <- *offerMsg
+
+	answerMsg := <-comChan
+	if err := conn.WriteJSON(answerMsg); err != nil {
+		log.Println("write:", err)
+		return
+	}
+}
+
+func generateAnswer(comChan chan signalMsg, conn *websocket.Conn) {
+	offer := <-comChan
+	if err := conn.WriteJSON(offer); err != nil {
+		log.Println("write:", err)
+		return
+	}
+
+	answerMsg := &signalMsg{}
+	if err := conn.ReadJSON(answerMsg); err != nil {
+		log.Println("read:", err)
+		return
+	} else if answerMsg.Type != "answer" {
+		log.Println("expected answer from 'offer' got:", answerMsg.Type)
+		return
+	}
+	comChan <- *answerMsg
+}
+
+func main() {
+	var upgrader websocket.Upgrader
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -50,57 +71,25 @@ func main() {
 		}
 		defer conn.Close()
 
-		busMu.Lock()
-		recv := make(chan *SignalMsg)
-		id := len(bus)
-		bus[id] = recv
-		busMu.Unlock()
+		roomsMu.Lock()
+		comChan, shouldAnswer := rooms[roomName]
+		if !shouldAnswer {
+			comChan = make(chan signalMsg)
+			rooms[roomName] = comChan
 
-		partner, first := match(id)
-
-		busMu.Lock()
-		send := bus[partner]
-		busMu.Unlock()
-
-		go func() {
-			for r := range recv {
-				if err := conn.WriteJSON(r); err != nil {
-					log.Println("write:", err)
-					return
-				}
-			}
-		}()
-
-		msg := &SignalMsg{}
-		for {
-			if err := conn.ReadJSON(msg); err != nil {
-				log.Println("read:", err)
-				return
-			}
-
-			switch msg.Type {
-			case "offer":
-				if first {
-					send <- msg
-				}
-
-			case "answer":
-				send <- msg
-
-			case "exit":
-				goto CLOSE
-
-			default:
-				fmt.Println("unknown type", msg.Type)
-				goto CLOSE
-			}
+			defer func() {
+				roomsMu.Lock()
+				delete(rooms, roomName)
+				roomsMu.Unlock()
+			}()
 		}
-	CLOSE:
+		roomsMu.Unlock()
 
-		close(send)
-		busMu.Lock()
-		delete(bus, partner)
-		busMu.Unlock()
+		if shouldAnswer {
+			generateAnswer(comChan, conn)
+		} else {
+			generateOffer(comChan, conn)
+		}
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))

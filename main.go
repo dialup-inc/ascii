@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maxhawkins/asciirtc/capture"
+	"github.com/pions/asciirtc/capture"
 	"github.com/pions/rtcp"
 	"github.com/pions/rtp/codecs"
 	"github.com/pions/webrtc"
@@ -18,7 +18,7 @@ import (
 	"github.com/pions/webrtc/pkg/media/samplebuilder"
 )
 
-type Demo struct {
+type demo struct {
 	RTCConfig webrtc.RTCConfiguration
 
 	width  int
@@ -30,7 +30,7 @@ type Demo struct {
 	conn   *webrtc.RTCPeerConnection
 }
 
-func (d *Demo) newConn() (*webrtc.RTCPeerConnection, error) {
+func (d *demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	d.connMu.Lock()
 	defer d.connMu.Unlock()
 
@@ -47,7 +47,7 @@ func (d *Demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	return conn, nil
 }
 
-func (d *Demo) Match(camID int, ctx context.Context) error {
+func (d *demo) Match(ctx context.Context, camID int, signalerURL string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	conn, err := d.newConn()
@@ -94,7 +94,7 @@ func (d *Demo) Match(camID int, ctx context.Context) error {
 		})
 	})
 
-	if err := Match(ctx, "ws://localhost:8080/ws", conn); err != nil {
+	if err := match(ctx, fmt.Sprintf("ws://%s/ws", signalerURL), conn); err != nil {
 		cancel()
 		return err
 	}
@@ -131,7 +131,7 @@ func (d *Demo) Match(camID int, ctx context.Context) error {
 	return err
 }
 
-func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
+func (d *demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 	// Send PLIs every once in a while
 	go func() {
 		ticker := time.NewTicker(time.Second * 3)
@@ -177,7 +177,7 @@ func (d *Demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 	}
 }
 
-func (d *Demo) decode(payload []byte) error {
+func (d *demo) decode(payload []byte) error {
 	if len(payload) == 0 {
 		return nil
 	}
@@ -208,9 +208,9 @@ func (d *Demo) decode(payload []byte) error {
 	return nil
 }
 
-func NewDemo(width, height int) *Demo {
+func newDemo(width, height int) *demo {
 	printer := NewPrinter()
-	d := &Demo{
+	d := &demo{
 		width:   width,
 		height:  height,
 		printer: printer,
@@ -221,15 +221,16 @@ func NewDemo(width, height int) *Demo {
 
 func main() {
 	var (
-		color = flag.Bool("color", true, "whether to render image with colors")
-		camID = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
+		color       = flag.Bool("color", true, "whether to render image with colors")
+		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
+		signalerURL = flag.String("signaler-url", "localhost:8080", "host and port of the signaler")
 	)
 
 	flag.Parse()
 
 	webrtc.RegisterDefaultCodecs()
 
-	demo := NewDemo(640, 480)
+	demo := newDemo(640, 480)
 	demo.RTCConfig = webrtc.RTCConfiguration{
 		IceServers: []webrtc.RTCIceServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
@@ -237,7 +238,7 @@ func main() {
 	}
 	demo.printer.Colored = *color
 
-	if err := demo.Match(*camID, context.Background()); err != nil {
+	if err := demo.Match(context.Background(), *camID, *signalerURL); err != nil {
 		fmt.Printf("Match error: %v\n", err)
 	}
 
