@@ -47,7 +47,7 @@ func (d *Demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	return conn, nil
 }
 
-func (d *Demo) Match(ctx context.Context) error {
+func (d *Demo) Match(camID int, ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	conn, err := d.newConn()
@@ -56,7 +56,7 @@ func (d *Demo) Match(ctx context.Context) error {
 		return err
 	}
 
-	if err := capture.Start(d.width, d.height); err != nil {
+	if err := capture.Start(camID, d.width, d.height); err != nil {
 		cancel()
 		return err
 	}
@@ -222,7 +222,9 @@ func NewDemo(width, height int) *Demo {
 func main() {
 	var (
 		color = flag.Bool("color", true, "whether to render image with colors")
+		camID = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
 	)
+
 	flag.Parse()
 
 	webrtc.RegisterDefaultCodecs()
@@ -235,7 +237,7 @@ func main() {
 	}
 	demo.printer.Colored = *color
 
-	if err := demo.Match(context.Background()); err != nil {
+	if err := demo.Match(*camID, context.Background()); err != nil {
 		fmt.Printf("Match error: %v\n", err)
 	}
 

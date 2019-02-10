@@ -3,9 +3,9 @@
 #include "encode.h"
 #include "errors.h"
 
-int capture_start(int width, int height) {
+int capture_start(int cam_id, int width, int height) {
     int err;
-    err = cam_open(0, width, height);
+    err = cam_open(cam_id, width, height);
     if (err) {
         return err;
     }

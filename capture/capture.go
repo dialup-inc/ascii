@@ -10,8 +10,8 @@ import (
 	"unsafe"
 )
 
-func Start(width, height int) error {
-	ret := C.capture_start(C.int(width), C.int(height))
+func Start(camId, width, height int) error {
+	ret := C.capture_start(C.int(camId), C.int(width), C.int(height))
 	if ret != 0 {
 		return CaptureError(ret)
 	}
