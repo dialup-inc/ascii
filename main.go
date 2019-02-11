@@ -223,7 +223,7 @@ func main() {
 	var (
 		color       = flag.Bool("color", true, "whether to render image with colors")
 		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
-		signalerURL = flag.String("signaler-url", "localhost:8080", "host and port of the signaler")
+		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
 	)
 
 	flag.Parse()
