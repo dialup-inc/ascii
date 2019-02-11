@@ -47,7 +47,7 @@ func (d *demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	return conn, nil
 }
 
-func (d *demo) Match(ctx context.Context, camID int, signalerURL string) error {
+func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	conn, err := d.newConn()
@@ -94,7 +94,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL string) error {
 		})
 	})
 
-	if err := match(ctx, fmt.Sprintf("ws://%s/ws", signalerURL), conn); err != nil {
+	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn); err != nil {
 		cancel()
 		return err
 	}
@@ -224,9 +224,14 @@ func main() {
 		color       = flag.Bool("color", true, "whether to render image with colors")
 		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
 		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
+		room        = flag.String("room", "", "Name of room to join ")
 	)
-
 	flag.Parse()
+
+	if *room == "" {
+		fmt.Println("No -room has been provided")
+		return
+	}
 
 	webrtc.RegisterDefaultCodecs()
 
@@ -238,8 +243,9 @@ func main() {
 	}
 	demo.printer.Colored = *color
 
-	if err := demo.Match(context.Background(), *camID, *signalerURL); err != nil {
+	if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
 		fmt.Printf("Match error: %v\n", err)
+		return
 	}
 
 	select {}

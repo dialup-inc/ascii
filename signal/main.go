@@ -8,8 +8,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const roomName = "seanTest"
-
 type signalMsg struct {
 	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
@@ -70,6 +68,12 @@ func main() {
 			return
 		}
 		defer conn.Close()
+
+		roomName := r.URL.Query().Get("room")
+		if roomName == "" {
+			log.Println("No room name provided", err)
+			return
+		}
 
 		roomsMu.Lock()
 		comChan, shouldAnswer := rooms[roomName]
