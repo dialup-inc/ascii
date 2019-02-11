@@ -11,13 +11,10 @@ require (
 	github.com/pions/pkg v0.0.0-20181115215726-b60cd756f712 // indirect
 	github.com/pions/rtcp v1.0.0
 	github.com/pions/rtp v1.0.0
-	github.com/pions/webrtc v1.2.1-0.20190210102905-9f5692ace7a8
+	github.com/pions/webrtc v1.2.1-0.20190211224249-885c5daf0df0
 	github.com/qeesung/image2ascii v1.0.1
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/wayneashleyberry/terminal-dimensions v1.0.0 // indirect
 	golang.org/x/net v0.0.0-20181220203305-927f97764cc3 // indirect
-	golang.org/x/sys v0.0.0-20190209173611-3b5209105503 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 )
-
-replace github.com/marten-seemann/qtls v0.0.0-20190110111248-7a090b30c3ab => github.com/sean-der/qtls-vendor-extracted v0.0.0-20190210024908-018998217c65
