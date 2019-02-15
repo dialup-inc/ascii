@@ -30,6 +30,9 @@ type demo struct {
 	conn   *webrtc.RTCPeerConnection
 }
 
+// mode for frames width per timestamp from a 30 second capture
+const rtpAverageFrameWidth = 7
+
 func (d *demo) newConn() (*webrtc.RTCPeerConnection, error) {
 	d.connMu.Lock()
 	defer d.connMu.Unlock()
@@ -159,7 +162,7 @@ func (d *demo) handleTrack(ctx context.Context, track *webrtc.RTCTrack) {
 		}
 	}()
 
-	builder := samplebuilder.New(256, &codecs.VP8Packet{})
+	builder := samplebuilder.New(rtpAverageFrameWidth*5, &codecs.VP8Packet{})
 	for j := 0; ; j++ {
 		select {
 		case <-ctx.Done():
