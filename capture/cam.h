@@ -1,9 +1,15 @@
 #ifndef _CAM_H_
 #define _CAM_H_
 
-int cam_open(int cam_id, int width, int height);
+#include <libuvc/libuvc.h>
 
-/** yv12_frame: rows = height * 1.5, cols = width */
-int cam_yv12_frame(char* yv12_frame);
+class Camera {
+public:
+    Camera();
+    int read(char *ret);
+    int start(int cam_id, int width, int height);
+private:
+    uvc_context_t *ctx;
+};
 
 #endif

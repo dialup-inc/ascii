@@ -1,7 +1,7 @@
 package capture
 
 /*
-#cgo pkg-config: vpx
+#cgo pkg-config: --static vpx
 
 #include "decode.h"
 */

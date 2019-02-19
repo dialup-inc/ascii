@@ -3,9 +3,14 @@
 #include "encode.h"
 #include "errors.h"
 
+// HACK
+static char yv12[460800];
+static Camera camera;
+
 int capture_start(int cam_id, int width, int height) {
+    
     int err;
-    err = cam_open(cam_id, width, height);
+    err = camera.start(cam_id, width, height);
     if (err) {
         return err;
     }
@@ -17,11 +22,8 @@ int capture_start(int cam_id, int width, int height) {
     return 0;
 }
 
-// HACK
-static char yv12[460800];
-
 int capture_read(char* ret, int len, int force_key_frame) {
-    int err = cam_yv12_frame(yv12);
+    int err = camera.read(yv12);
     if (err) {
         return err;
     }

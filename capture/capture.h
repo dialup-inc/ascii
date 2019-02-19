@@ -2,7 +2,6 @@
 #define CAPTURE_H
 
 #ifdef __cplusplus
-#include <opencv2/opencv.hpp>
 extern "C" {
 #endif
 

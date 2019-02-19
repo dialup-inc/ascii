@@ -1,7 +1,7 @@
 package capture
 
 /*
-#cgo pkg-config: opencv vpx
+#cgo pkg-config: --static vpx libuvc
 
 #include "capture.h"
 */
