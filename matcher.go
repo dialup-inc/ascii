@@ -9,11 +9,11 @@ import (
 )
 
 type signalMsg struct {
-	Type    string                       `json:"type"`
-	Payload webrtc.RTCSessionDescription `json:"payload"`
+	Type    string                    `json:"type"`
+	Payload webrtc.SessionDescription `json:"payload"`
 }
 
-func match(ctx context.Context, wsURL string, conn *webrtc.RTCPeerConnection) error {
+func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
 	signalConn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		return err
