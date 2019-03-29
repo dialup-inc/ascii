@@ -20,6 +20,8 @@ func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error
 	}
 	defer signalConn.Close()
 
+	fmt.Println("requesting match...")
+
 	msg := &signalMsg{}
 	for {
 		if err := signalConn.ReadJSON(msg); err != nil {
@@ -59,12 +61,14 @@ func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error
 			}); err != nil {
 				return err
 			}
+			fmt.Println("found match")
 
 			return nil
 		case "answer":
 			if err := conn.SetRemoteDescription(msg.Payload); err != nil {
 				return err
 			}
+			fmt.Println("found match")
 
 			return nil
 		default:

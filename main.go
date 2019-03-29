@@ -106,6 +106,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}()
 
 	conn.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
+		fmt.Println("ICEConnectionState", s)
 		if s == webrtc.ICEConnectionStateClosed || s == webrtc.ICEConnectionStateFailed {
 			d.connMu.Lock()
 			if conn == d.conn {
@@ -247,7 +248,7 @@ func main() {
 	)
 	flag.Parse()
 
-	fmt.Println("Welcome")
+	fmt.Println("starting up...")
 
 	demo := newDemo(640, 480)
 	demo.RTCConfig = webrtc.Configuration{
