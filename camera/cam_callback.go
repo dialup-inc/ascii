@@ -21,10 +21,6 @@ func onFrame(userdata unsafe.Pointer, buf unsafe.Pointer, size C.int) {
 	cbNum := (*C.int)(userdata)
 
 	cb := lookup(int(*cbNum))
-
-	if cb == nil {
-		return
-	}
 	cb(frame)
 }
 

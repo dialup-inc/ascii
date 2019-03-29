@@ -18,6 +18,8 @@ import (
 
 type Camera struct {
 	c C.Camera
+
+	callback int
 }
 
 func (c *Camera) Start(camID, width, height int) error {
@@ -34,9 +36,9 @@ func (c *Camera) Close() error {
 func New(cb func([]byte)) (*Camera, error) {
 	cam := &Camera{}
 
-	cbNum := register(cb)
+	cam.callback = register(cb)
 
-	if ret := C.cam_init(&cam.c, (C.FrameCallback)(unsafe.Pointer(C.onFrame_cgo)), unsafe.Pointer(&cbNum)); ret != 0 {
+	if ret := C.cam_init(&cam.c, (C.FrameCallback)(unsafe.Pointer(C.onFrame_cgo)), unsafe.Pointer(&cam.callback)); ret != 0 {
 		return nil, fmt.Errorf("error %d", ret)
 	}
 	return cam, nil
