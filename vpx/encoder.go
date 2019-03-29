@@ -12,10 +12,13 @@ int vpx_cleanup_enc(vpx_codec_ctx_t *ctx, vpx_image_t *raw);
 import "C"
 
 import (
+	"sync"
 	"unsafe"
 )
 
 type Encoder struct {
+	mu sync.Mutex
+
 	ctx C.vpx_codec_ctx_t
 	img *C.vpx_image_t
 }
@@ -30,6 +33,9 @@ func NewEncoder(width, height int) (*Encoder, error) {
 }
 
 func (e *Encoder) Close() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	ret := C.vpx_cleanup_enc(&e.ctx, e.img)
 	if ret != 0 {
 		return VPXCodecErr(ret)
@@ -38,6 +44,9 @@ func (e *Encoder) Close() error {
 }
 
 func (e *Encoder) Encode(vpxFrame, yuvFrame []byte, pts int, forceKeyframe bool) (n int, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	inP := (*C.char)(unsafe.Pointer(&yuvFrame[0]))
 	inL := C.int(len(yuvFrame))
 
