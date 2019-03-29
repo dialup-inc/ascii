@@ -11,10 +11,13 @@ int vpx_cleanup_dec(vpx_codec_ctx_t *ctx);
 */
 import "C"
 import (
+	"sync"
 	"unsafe"
 )
 
 type Decoder struct {
+	mu sync.Mutex
+
 	ctx C.vpx_codec_ctx_t
 }
 
@@ -28,6 +31,9 @@ func NewDecoder() (*Decoder, error) {
 }
 
 func (d *Decoder) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	ret := C.vpx_cleanup_dec(&d.ctx)
 	if ret != 0 {
 		return VPXCodecErr(ret)
@@ -36,6 +42,9 @@ func (d *Decoder) Close() error {
 }
 
 func (d *Decoder) Decode(out, in []byte) (n int, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	inP := (*C.char)(unsafe.Pointer(&in[0]))
 	inL := C.int(len(in))
 
