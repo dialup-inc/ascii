@@ -35,31 +35,19 @@ type demo struct {
 // mode for frames width per timestamp from a 30 second capture
 const rtpAverageFrameWidth = 7
 
-func (d *demo) newConn() (*webrtc.PeerConnection, error) {
-	d.connMu.Lock()
-	defer d.connMu.Unlock()
-
-	if d.conn != nil {
-		return nil, errors.New("another peer connection is connected")
-	}
-
-	conn, err := webrtc.NewPeerConnection(d.RTCConfig)
-	if err != nil {
-		return nil, err
-	}
-	d.conn = conn
-
-	return conn, nil
-}
-
 func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
-	conn, err := d.newConn()
+	m := webrtc.MediaEngine{}
+	m.RegisterCodec(webrtc.NewRTPVP8Codec(webrtc.DefaultPayloadTypeVP8, 90000))
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
+
+	conn, err := api.NewPeerConnection(d.RTCConfig)
 	if err != nil {
 		cancel()
 		return err
 	}
+	d.conn = conn
 
 	var track *webrtc.Track
 
@@ -77,7 +65,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		frameMu.Lock()
 		defer frameMu.Unlock()
 
-		n, err := enc.Encode(vpxBuf, frame, pts, true)
+		n, err := enc.Encode(vpxBuf, frame, pts, pts%10 == 0)
 		if err != nil {
 			log.Fatal("encode: ", err)
 		}
@@ -110,10 +98,12 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.cam = cam
 
-	if err := cam.Start(camID, d.width, d.height); err != nil {
-		cancel()
-		return err
-	}
+	go func() {
+		time.Sleep(5 * time.Second)
+		if err := cam.Start(camID, d.width, d.height); err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	conn.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
 		if s == webrtc.ICEConnectionStateClosed || s == webrtc.ICEConnectionStateFailed {
@@ -131,6 +121,13 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		}
 	})
 
+	var once sync.Once
+	conn.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
+		once.Do(func() {
+			d.handleTrack(ctx, track)
+		})
+	})
+
 	track, err = conn.NewTrack(webrtc.DefaultPayloadTypeVP8, 1234, "video", "asciirtc")
 	if err != nil {
 		cancel()
@@ -141,18 +138,10 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		return err
 	}
 
-	var once sync.Once
-	conn.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
-		once.Do(func() {
-			d.handleTrack(ctx, track)
-		})
-	})
-
 	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn); err != nil {
 		cancel()
 		return err
 	}
-	fmt.Println("CONNECTED")
 
 	return err
 }
@@ -254,14 +243,11 @@ func main() {
 		color       = flag.Bool("color", true, "whether to render image with colors")
 		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
 		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
-		room        = flag.String("room", "", "Name of room to join ")
+		room        = flag.String("room", "pion4", "Name of room to join ")
 	)
 	flag.Parse()
 
-	if *room == "" {
-		fmt.Println("No -room has been provided")
-		return
-	}
+	fmt.Println("Welcome")
 
 	demo := newDemo(640, 480)
 	demo.RTCConfig = webrtc.Configuration{
