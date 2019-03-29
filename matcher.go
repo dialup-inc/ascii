@@ -32,6 +32,9 @@ func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error
 			if err != nil {
 				return err
 			}
+			if err := conn.SetLocalDescription(offer); err != nil {
+				return err
+			}
 			if err := signalConn.WriteJSON(signalMsg{
 				Type:    "offer",
 				Payload: offer,
@@ -45,6 +48,9 @@ func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error
 			}
 			answer, err := conn.CreateAnswer(nil)
 			if err != nil {
+				return err
+			}
+			if err := conn.SetLocalDescription(answer); err != nil {
 				return err
 			}
 			if err := signalConn.WriteJSON(signalMsg{

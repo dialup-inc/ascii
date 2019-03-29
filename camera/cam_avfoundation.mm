@@ -45,6 +45,7 @@ void NV12_YUV420P(const unsigned char *image_src, unsigned char *image_dst,
 - (void)captureOutput:(AVCaptureOutput *)captureOutput
     didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
            fromConnection:(AVCaptureConnection *)connection {
+
   if (CMSampleBufferGetNumSamples(sampleBuffer) != 1 ||
       !CMSampleBufferIsValid(sampleBuffer) ||
       !CMSampleBufferDataIsReady(sampleBuffer)) {
