@@ -7,6 +7,7 @@ import (
 	"image"
 	"log"
 	"time"
+	"os"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
@@ -132,6 +133,17 @@ func main() {
 
 	fmt.Println("starting up...")
 
+	if err := CaptureStdin(func(c rune) {
+		switch c {
+		case 3: // ctrl-c
+			os.Exit(0)
+		default:
+			// nothing for now
+		}
+	}); err != nil {
+		log.Fatal(err)
+	}
+
 	demo, err := newDemo(640, 480)
 	if err != nil {
 		log.Fatal(err)
@@ -147,4 +159,6 @@ func main() {
 		fmt.Printf("Match error: %v\n", err)
 		return
 	}
+
+	select {}
 }
