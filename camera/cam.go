@@ -30,6 +30,7 @@ func (c *Camera) Start(camID, width, height int, framerate float32) error {
 }
 
 func (c *Camera) Close() error {
+	// TODO
 	return nil
 }
 

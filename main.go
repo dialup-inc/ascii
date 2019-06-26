@@ -5,17 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"log"
 	"sync"
 	"time"
+	"log"
 
-	"github.com/pions/asciirtc/camera"
 	"github.com/pions/asciirtc/term"
 	"github.com/pions/asciirtc/vpx"
 	"github.com/pions/rtcp"
 	"github.com/pions/rtp/codecs"
 	"github.com/pions/webrtc"
-	"github.com/pions/webrtc/pkg/media"
 	"github.com/pions/webrtc/pkg/media/samplebuilder"
 )
 
@@ -30,7 +28,7 @@ type demo struct {
 	connMu sync.Mutex
 	conn   *webrtc.PeerConnection
 
-	cam *camera.Camera
+	capture *Capture
 }
 
 // mode for frames width per timestamp from a 30 second capture
@@ -50,58 +48,10 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.conn = conn
 
-	var track *webrtc.Track
-
-	var frameMu sync.Mutex
-	var pts int
-	vpxBuf := make([]byte, 5*1024*1024)
-
-	enc, err := vpx.NewEncoder(d.width, d.height)
-	if err != nil {
-		cancel()
-		return err
-	}
-
-	cb := func(frame []byte) {
-		frameMu.Lock()
-		defer frameMu.Unlock()
-
-		n, err := enc.Encode(vpxBuf, frame, pts, pts%10 == 0)
-		if err != nil {
-			log.Fatal("encode: ", err)
-		}
-		pts++
-
-		data := vpxBuf[:n]
-
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		samp := media.Sample{Data: data, Samples: 1}
-
-		if track == nil {
-			return
-		}
-
-		if err := track.WriteSample(samp); err != nil {
-			fmt.Println(err)
-			return
-		}
-	}
-
-	cam, err := camera.New(cb)
-	if err != nil {
-		cancel()
-		return err
-	}
-	d.cam = cam
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		if err := cam.Start(camID, d.width, d.height, 5); err != nil {
+		if err := d.capture.Start(camID, 5); err != nil {
 			fmt.Println(err)
 		}
 	}()
@@ -130,7 +80,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		})
 	})
 
-	track, err = conn.NewTrack(webrtc.DefaultPayloadTypeVP8, 1234, "video", "asciirtc")
+	track, err := conn.NewTrack(webrtc.DefaultPayloadTypeVP8, 1234, "video", "asciirtc")
 	if err != nil {
 		cancel()
 		return err
@@ -139,6 +89,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		cancel()
 		return err
 	}
+	d.capture.SetTrack(track)
 
 	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn); err != nil {
 		cancel()
@@ -229,14 +180,21 @@ func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) err
 	return nil
 }
 
-func newDemo(width, height int) *demo {
+func newDemo(width, height int) (*demo, error) {
+	cap, err := NewCapture(width, height)
+	if err != nil {
+		return nil, err
+	}
+
 	d := &demo{
 		width:    width,
 		height:   height,
 		renderer: term.NewRenderer(),
+		capture: cap,
 	}
 	d.renderer.Start()
-	return d
+
+	return d, nil
 }
 
 func main() {
@@ -249,7 +207,10 @@ func main() {
 
 	fmt.Println("starting up...")
 
-	demo := newDemo(640, 480)
+	demo, err := newDemo(640, 480)
+	if err != nil {
+		log.Fatal(err)
+	}
 	demo.RTCConfig = webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
