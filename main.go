@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pions/asciirtc/camera"
-	"github.com/pions/asciirtc/render"
+	"github.com/pions/asciirtc/term"
 	"github.com/pions/asciirtc/vpx"
 	"github.com/pions/rtcp"
 	"github.com/pions/rtp/codecs"
@@ -25,7 +25,7 @@ type demo struct {
 	width  int
 	height int
 
-	renderer *render.Renderer
+	renderer *term.Renderer
 
 	connMu sync.Mutex
 	conn   *webrtc.PeerConnection
@@ -233,7 +233,7 @@ func newDemo(width, height int) *demo {
 	d := &demo{
 		width:    width,
 		height:   height,
-		renderer: render.NewRenderer(),
+		renderer: term.NewRenderer(),
 	}
 	d.renderer.Start()
 	return d
