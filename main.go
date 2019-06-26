@@ -5,17 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"sync"
-	"io"
-	"time"
 	"log"
+	"time"
 
-	"github.com/pions/asciirtc/term"
-	"github.com/pions/asciirtc/vpx"
-	"github.com/pion/rtcp"
-	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v2"
-	"github.com/pion/webrtc/v2/pkg/media/samplebuilder"
+	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialupdotcom/ascii_roulette/vpx"
 )
 
 type demo struct {
@@ -26,33 +21,20 @@ type demo struct {
 
 	renderer *term.Renderer
 
-	connMu sync.Mutex
-	conn   *webrtc.PeerConnection
+	conn *Conn
 
 	capture *Capture
 }
 
-// mode for frames width per timestamp from a 30 second capture
-const rtpAverageFrameWidth = 7
-
 func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
-	m := webrtc.MediaEngine{}
-	m.RegisterCodec(webrtc.NewRTPVP8Codec(webrtc.DefaultPayloadTypeVP8, 90000))
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
-
-	conn, err := api.NewPeerConnection(d.RTCConfig)
+	conn, err := NewConn(d.RTCConfig)
 	if err != nil {
 		cancel()
 		return err
 	}
 	d.conn = conn
-
-	if _, err = conn.AddTransceiver(webrtc.RTPCodecTypeVideo); err != nil {
-		cancel()
-		return err
-	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
@@ -62,114 +44,30 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		d.capture.RequestKeyframe()
 	}()
 
-	conn.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
-		fmt.Println("ICEConnectionState", s)
-		if s == webrtc.ICEConnectionStateClosed || s == webrtc.ICEConnectionStateFailed {
-			d.connMu.Lock()
-			if conn == d.conn {
-				d.conn = nil
-			}
-			d.connMu.Unlock()
+	d.capture.SetTrack(conn.SendTrack)
 
-			cancel()
-
-			// if err := capture.Stop(); err != nil {
-			// 	fmt.Println(err)
-			// }
-		}
-	})
-
-	var once sync.Once
-	conn.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
-		once.Do(func() {
-			d.handleTrack(ctx, track, recv)
-		})
-	})
-
-	track, err := conn.NewTrack(webrtc.DefaultPayloadTypeVP8, 1234, "video", "asciirtc")
+	dec, err := vpx.NewDecoder()
 	if err != nil {
-		cancel()
+		fmt.Println(err)
 		return err
 	}
-	if _, err := conn.AddTrack(track); err != nil {
-		cancel()
-		return err
-	}
-	d.capture.SetTrack(track)
 
-	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn); err != nil {
+	frameBuf := make([]byte, d.width*d.height*4)
+	conn.OnFrame = func(frame []byte) {
+		if err := d.decode(dec, frameBuf, frame); err != nil {
+			conn.SendPLI()
+		}
+	}
+	conn.OnPLI = func() {
+		d.capture.RequestKeyframe()
+	}
+
+	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn.pc); err != nil {
 		cancel()
 		return err
 	}
 
 	return err
-}
-
-func (d *demo) handleTrack(ctx context.Context, track *webrtc.Track, recv *webrtc.RTPReceiver) {
-	var lastPLI time.Time
-	sendPLI := func() {
-		if time.Since(lastPLI) < 500 * time.Millisecond {
-			return
-		}
-
-		pli := &rtcp.PictureLossIndication{MediaSSRC: track.SSRC()}
-		if err := d.conn.WriteRTCP([]rtcp.Packet{pli}); err != nil {
-			fmt.Println(err)
-		}
-
-		lastPLI = time.Now()
-	}
-
-	dec, err := vpx.NewDecoder()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	go func() {
-		for {
-			rtcps, err := recv.ReadRTCP()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				fmt.Println(err)
-			}
-			
-			for _, pkt := range rtcps {
-				switch pkt.(type) {
-				case *rtcp.PictureLossIndication:
-					d.capture.RequestKeyframe()
-				}
-			}
-		}
-	}()
-
-	// todo: less alloc
-	frameBuf := make([]byte, d.width*d.height*4)
-
-	builder := samplebuilder.New(rtpAverageFrameWidth*5, &codecs.VP8Packet{})
-	for j := 0; ; j++ {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		pkt, err := track.ReadRTP()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		builder.Push(pkt)
-
-		for s := builder.Pop(); s != nil; s = builder.Pop() {
-			if err := d.decode(dec, frameBuf, s.Data); err != nil {
-				sendPLI()
-			}
-		}
-	}
 }
 
 func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) error {
@@ -212,7 +110,7 @@ func newDemo(width, height int) (*demo, error) {
 		width:    width,
 		height:   height,
 		renderer: term.NewRenderer(),
-		capture: cap,
+		capture:  cap,
 	}
 	d.renderer.Start()
 

@@ -5,16 +5,16 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pions/asciirtc/camera"
-	"github.com/pions/asciirtc/vpx"
 	"github.com/pion/webrtc/v2"
 	"github.com/pion/webrtc/v2/pkg/media"
+	"github.com/dialupdotcom/ascii_roulette/camera"
+	"github.com/dialupdotcom/ascii_roulette/vpx"
 )
 
 func NewCapture(width, height int) (*Capture, error) {
 	cap := &Capture{
 		vpxBuf: make([]byte, 5*1024*1024),
-		width: width,
+		width:  width,
 		height: height,
 	}
 
@@ -37,7 +37,7 @@ type Capture struct {
 	enc *vpx.Encoder
 	cam *camera.Camera
 
-	width int
+	width  int
 	height int
 
 	ptsMu sync.Mutex
