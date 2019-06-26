@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gorilla/websocket"
-	"github.com/pions/webrtc"
+	"github.com/pion/webrtc/v2"
 )
 
 type signalMsg struct {

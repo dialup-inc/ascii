@@ -6,15 +6,16 @@ import (
 	"fmt"
 	"image"
 	"sync"
+	"io"
 	"time"
 	"log"
 
 	"github.com/pions/asciirtc/term"
 	"github.com/pions/asciirtc/vpx"
-	"github.com/pions/rtcp"
-	"github.com/pions/rtp/codecs"
-	"github.com/pions/webrtc"
-	"github.com/pions/webrtc/pkg/media/samplebuilder"
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp/codecs"
+	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v2/pkg/media/samplebuilder"
 )
 
 type demo struct {
@@ -48,12 +49,17 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.conn = conn
 
+	if _, err = conn.AddTransceiver(webrtc.RTPCodecTypeVideo); err != nil {
+		cancel()
+		return err
+	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
 		if err := d.capture.Start(camID, 5); err != nil {
 			fmt.Println(err)
 		}
+		d.capture.RequestKeyframe()
 	}()
 
 	conn.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
@@ -76,7 +82,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	var once sync.Once
 	conn.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
 		once.Do(func() {
-			d.handleTrack(ctx, track)
+			d.handleTrack(ctx, track, recv)
 		})
 	})
 
@@ -99,29 +105,45 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	return err
 }
 
-func (d *demo) handleTrack(ctx context.Context, track *webrtc.Track) {
-	// Send PLIs every once in a while
-	go func() {
-		ticker := time.NewTicker(time.Second * 3)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-
-			case <-ticker.C:
-				pli := &rtcp.PictureLossIndication{MediaSSRC: track.SSRC()}
-				if err := d.conn.SendRTCP(pli); err != nil {
-					fmt.Println(err)
-				}
-			}
+func (d *demo) handleTrack(ctx context.Context, track *webrtc.Track, recv *webrtc.RTPReceiver) {
+	var lastPLI time.Time
+	sendPLI := func() {
+		if time.Since(lastPLI) < 500 * time.Millisecond {
+			return
 		}
-	}()
+
+		pli := &rtcp.PictureLossIndication{MediaSSRC: track.SSRC()}
+		if err := d.conn.WriteRTCP([]rtcp.Packet{pli}); err != nil {
+			fmt.Println(err)
+		}
+
+		lastPLI = time.Now()
+	}
 
 	dec, err := vpx.NewDecoder()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	go func() {
+		for {
+			rtcps, err := recv.ReadRTCP()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				fmt.Println(err)
+			}
+			
+			for _, pkt := range rtcps {
+				switch pkt.(type) {
+				case *rtcp.PictureLossIndication:
+					d.capture.RequestKeyframe()
+				}
+			}
+		}
+	}()
 
 	// todo: less alloc
 	frameBuf := make([]byte, d.width*d.height*4)
@@ -144,7 +166,7 @@ func (d *demo) handleTrack(ctx context.Context, track *webrtc.Track) {
 
 		for s := builder.Pop(); s != nil; s = builder.Pop() {
 			if err := d.decode(dec, frameBuf, s.Data); err != nil {
-				fmt.Println(err)
+				sendPLI()
 			}
 		}
 	}

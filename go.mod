@@ -10,6 +10,9 @@ require (
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
+	github.com/pion/rtcp v1.2.0
+	github.com/pion/rtp v1.1.2
+	github.com/pion/webrtc/v2 v2.0.23
 	github.com/pions/ice v0.1.1 // indirect
 	github.com/pions/quic-go v0.10.2 // indirect
 	github.com/pions/rtcp v1.1.2
@@ -19,8 +22,6 @@ require (
 	github.com/qeesung/image2ascii v1.0.1
 	github.com/stretchr/objx v0.1.1 // indirect
 	github.com/wayneashleyberry/terminal-dimensions v1.0.0 // indirect
-	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c // indirect
-	golang.org/x/net v0.0.0-20190327214358-63eda1eb0650 // indirect
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6 // indirect
 	golang.org/x/sys v0.0.0-20190624142023-c5567b49c5d0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect

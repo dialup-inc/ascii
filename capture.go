@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pions/asciirtc/camera"
 	"github.com/pions/asciirtc/vpx"
-	"github.com/pions/webrtc"
-	"github.com/pions/webrtc/pkg/media"
+	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v2/pkg/media"
 )
 
 func NewCapture(width, height int) (*Capture, error) {
@@ -44,6 +45,8 @@ type Capture struct {
 
 	vpxBuf []byte
 
+	forceKeyframe uint32
+
 	track *webrtc.Track
 }
 
@@ -56,6 +59,10 @@ func (c *Capture) Stop() error {
 	return nil
 }
 
+func (c *Capture) RequestKeyframe() {
+	atomic.StoreUint32(&c.forceKeyframe, 1)
+}
+
 func (c *Capture) SetTrack(track *webrtc.Track) {
 	c.track = track
 }
@@ -64,7 +71,9 @@ func (c *Capture) onFrame(frame []byte) {
 	c.ptsMu.Lock()
 	defer c.ptsMu.Unlock()
 
-	n, err := c.enc.Encode(c.vpxBuf, frame, c.pts, c.pts%10 == 0)
+	forceKeyframe := atomic.CompareAndSwapUint32(&c.forceKeyframe, 1, 0)
+
+	n, err := c.enc.Encode(c.vpxBuf, frame, c.pts, forceKeyframe)
 	if err != nil {
 		fmt.Println("encode: ", err)
 		return
