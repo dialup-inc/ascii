@@ -14,6 +14,10 @@ LDFLAGS = \
 	-framework Foundation \
 	-framework AVFoundation
 
+.PHONY: run
+run: asciirtc
+	./asciirtc
+
 asciirtc: camera/libcam.a *.go
 	go build -o $@ .
 
