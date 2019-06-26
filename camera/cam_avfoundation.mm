@@ -100,7 +100,7 @@ public:
   Capture(FrameCallback callback, void *userdata);
   ~Capture();
 
-  int start(int cam_id, int width, int height);
+  int start(int cam_id, int width, int height, float framerate);
 
 private:
   AVCaptureSession *mSession;
@@ -118,7 +118,28 @@ Capture::Capture(FrameCallback callback, void *userdata) {
   mUserdata = userdata;
 }
 
-int Capture::start(int cam_id, int width, int height) {
+void configureCamera(AVCaptureDevice *videoDevice, float desiredRate) {
+  float rate = 0;
+  AVCaptureDeviceFormat *currentFormat = [videoDevice activeFormat];
+  for (AVFrameRateRange *range in currentFormat.videoSupportedFrameRateRanges) {
+    rate = range.minFrameRate;
+    if (rate <= desiredRate) {
+      break;
+    }
+  }
+
+  if (rate <= 0) {
+    return;
+  }
+
+  if ([videoDevice lockForConfiguration:NULL]) {
+    videoDevice.activeVideoMaxFrameDuration = CMTimeMake(1, rate);
+    videoDevice.activeVideoMinFrameDuration = CMTimeMake(1, rate);
+    [videoDevice unlockForConfiguration];
+  }
+}
+
+int Capture::start(int cam_id, int width, int height, float framerate) {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
 
   NSArray *cameras = [[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]
@@ -134,6 +155,8 @@ int Capture::start(int cam_id, int width, int height) {
     [pool drain];
     return E_CAMERA_NOT_FOUND;
   }
+
+  configureCamera(mCamera, framerate);
 
   NSError *error = nil;
   mInput = [[AVCaptureDeviceInput alloc] initWithDevice:mCamera error:&error];
@@ -186,8 +209,8 @@ int cam_init(Camera *cam, FrameCallback callback, void *userdata) {
 };
 
 // cam_start makes a Camera begin reading frames from the device
-int cam_start(Camera cam, int cam_id, int width, int height) {
+int cam_start(Camera cam, int cam_id, int width, int height, float framerate) {
   Capture *capture = (Capture *)cam;
-  return capture->start(cam_id, width, height);
+  return capture->start(cam_id, width, height, framerate);
 };
 }

@@ -101,7 +101,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		if err := cam.Start(camID, d.width, d.height); err != nil {
+		if err := cam.Start(camID, d.width, d.height, 5); err != nil {
 			fmt.Println(err)
 		}
 	}()

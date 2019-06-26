@@ -14,7 +14,7 @@ typedef void (*FrameCallback)(void *userdata, void *buf, int len);
 
 typedef void *Camera;
 int cam_init(Camera *cam, FrameCallback callback, void *userdata);
-int cam_start(Camera cam, int cam_id, int width, int height);
+int cam_start(Camera cam, int cam_id, int width, int height, float framerate);
 int cam_close(Camera cam);
 
 #ifdef __cplusplus
