@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pions/asciirtc/camera"
+	"github.com/pions/asciirtc/render"
 	"github.com/pions/asciirtc/vpx"
 	"github.com/pions/rtcp"
 	"github.com/pions/rtp/codecs"
@@ -24,7 +25,7 @@ type demo struct {
 	width  int
 	height int
 
-	printer *Printer
+	renderer *render.Renderer
 
 	connMu sync.Mutex
 	conn   *webrtc.PeerConnection
@@ -223,28 +224,26 @@ func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) err
 		Rect:           image.Rect(0, 0, d.width, d.height),
 	}
 
-	d.printer.SetImage(img)
+	d.renderer.SetImage(img)
 
 	return nil
 }
 
 func newDemo(width, height int) *demo {
-	printer := NewPrinter()
 	d := &demo{
-		width:   width,
-		height:  height,
-		printer: printer,
+		width:    width,
+		height:   height,
+		renderer: render.NewRenderer(),
 	}
-	printer.Start()
+	d.renderer.Start()
 	return d
 }
 
 func main() {
 	var (
-		color       = flag.Bool("color", true, "whether to render image with colors")
 		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
 		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
-		room        = flag.String("room", "pion4", "Name of room to join ")
+		room        = flag.String("room", "pion5", "Name of room to join ")
 	)
 	flag.Parse()
 
@@ -256,7 +255,6 @@ func main() {
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
 		},
 	}
-	demo.printer.Colored = *color
 
 	if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
 		fmt.Printf("Match error: %v\n", err)

@@ -7,7 +7,7 @@ require (
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/gorilla/websocket v1.4.0
 	github.com/mattn/go-isatty v0.0.4 // indirect
-	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/pions/ice v0.1.1 // indirect
@@ -22,7 +22,7 @@ require (
 	golang.org/x/crypto v0.0.0-20190325154230-a5d413f7728c // indirect
 	golang.org/x/net v0.0.0-20190327214358-63eda1eb0650 // indirect
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6 // indirect
-	golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc // indirect
+	golang.org/x/sys v0.0.0-20190624142023-c5567b49c5d0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
