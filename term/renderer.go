@@ -102,6 +102,16 @@ func (r *Renderer) Start() {
 	a.HideCursor()
 	a.Bold()
 	a.Background(color.Black)
+	a.Foreground(color.White)
+
+	// Blank out the screen
+	winsize, err := GetWinSize()
+	if err != nil {
+		log.Fatal(err)
+	}
+	buf.WriteString(strings.Repeat(" ", winsize.Cols * winsize.Rows))
+
+	a.CursorPosition(1, 1)
 
 	io.Copy(os.Stdout, &buf)
 
