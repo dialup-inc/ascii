@@ -46,6 +46,7 @@ type Capture struct {
 	vpxBuf []byte
 
 	forceKeyframe uint32
+	encodeLock uint32
 
 	track *webrtc.Track
 }
@@ -68,8 +69,10 @@ func (c *Capture) SetTrack(track *webrtc.Track) {
 }
 
 func (c *Capture) onFrame(frame []byte) {
-	c.ptsMu.Lock()
-	defer c.ptsMu.Unlock()
+	if !atomic.CompareAndSwapUint32(&c.encodeLock, 0, 1) {
+		return
+	}
+	defer atomic.StoreUint32(&c.encodeLock, 0)
 
 	forceKeyframe := atomic.CompareAndSwapUint32(&c.forceKeyframe, 1, 0)
 
@@ -91,5 +94,4 @@ func (c *Capture) onFrame(frame []byte) {
 		fmt.Println("write sample: ", err)
 		return
 	}
-
 }
