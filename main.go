@@ -8,9 +8,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/pion/webrtc/v2"
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/pion/webrtc/v2"
 )
 
 type demo struct {
@@ -68,6 +68,11 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 
 	return err
+}
+
+func (d *demo) Stop() error {
+	d.renderer.Stop()
+	return nil
 }
 
 func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) error {
@@ -131,6 +136,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer demo.Stop()
 	demo.RTCConfig = webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
@@ -141,6 +147,4 @@ func main() {
 		fmt.Printf("Match error: %v\n", err)
 		return
 	}
-
-	select {}
 }

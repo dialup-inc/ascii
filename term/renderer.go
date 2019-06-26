@@ -98,6 +98,7 @@ func (r *Renderer) Start() {
 
 	a := ANSI{&buf}
 	a.Clear()
+	a.HideCursor()
 	a.Bold()
 	a.Background(color.Black)
 
@@ -108,5 +109,6 @@ func (r *Renderer) Start() {
 
 func (r *Renderer) Stop() {
 	a := ANSI{os.Stdout}
+	a.ShowCursor()
 	a.Reset()
 }

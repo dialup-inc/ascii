@@ -66,6 +66,14 @@ func (a *ANSI) Bold() (int, error) {
 	return a.Display.Write([]byte{'\033', '[', '1', 'm'})
 }
 
+func (a *ANSI) HideCursor() (int, error) {
+	return a.Display.Write([]byte{'\033', '[', '?', '2', '5', 'l'})
+}
+
+func (a *ANSI) ShowCursor() (int, error) {
+	return a.Display.Write([]byte{'\033', '[', '?', '2', '5', 'h'})
+}
+
 func (a *ANSI) Blink() (int, error) {
 	return a.Display.Write([]byte{'\033', '[', '5', 'm'})
 }

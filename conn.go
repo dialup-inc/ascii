@@ -8,8 +8,8 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp/codecs"
-	"github.com/pion/webrtc/v2"
 	"github.com/pion/webrtc/v2/pkg/media/samplebuilder"
+	"github.com/pion/webrtc/v2"
 )
 
 // mode for frames width per timestamp from a 30 second capture

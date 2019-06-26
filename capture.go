@@ -5,10 +5,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pion/webrtc/v2"
-	"github.com/pion/webrtc/v2/pkg/media"
 	"github.com/dialupdotcom/ascii_roulette/camera"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v2/pkg/media"
 )
 
 func NewCapture(width, height int) (*Capture, error) {
@@ -46,7 +46,7 @@ type Capture struct {
 	vpxBuf []byte
 
 	forceKeyframe uint32
-	encodeLock uint32
+	encodeLock    uint32
 
 	track *webrtc.Track
 }
