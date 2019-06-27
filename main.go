@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"time"
 	"os"
+	"regexp"
+	"time"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
@@ -37,6 +38,11 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.conn = conn
 
+	conn.OnMessage = func(m string) {
+		d.renderer.Messages = append(d.renderer.Messages, term.Message{User: "Them", Text: m})
+		d.renderer.RequestFrame()
+	}
+
 	go func() {
 		time.Sleep(5 * time.Second)
 		if err := d.capture.Start(camID, 5); err != nil {
@@ -50,6 +56,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	dec, err := vpx.NewDecoder()
 	if err != nil {
 		fmt.Println(err)
+		cancel()
 		return err
 	}
 
@@ -133,17 +140,6 @@ func main() {
 
 	fmt.Println("starting up...")
 
-	if err := CaptureStdin(func(c rune) {
-		switch c {
-		case 3: // ctrl-c
-			os.Exit(0)
-		default:
-			// nothing for now
-		}
-	}); err != nil {
-		log.Fatal(err)
-	}
-
 	demo, err := newDemo(640, 480)
 	if err != nil {
 		log.Fatal(err)
@@ -153,6 +149,39 @@ func main() {
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
 		},
+	}
+
+	ansiRegex := regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+
+	var input string
+	if err := CaptureStdin(func(c rune) {
+		switch c {
+		case 3: // ctrl-c
+			os.Exit(0)
+		case 127: // backspace
+			if len(input) > 0 {
+				input = input[:len(input)-1]
+			}
+			demo.renderer.SetInput(input)
+		case '\n', '\r':
+			demo.renderer.Messages = append(demo.renderer.Messages, term.Message{User: "You", Text: input})
+			if demo.conn != nil {
+				demo.conn.SendMessage(input)
+			}
+			input = ""
+			demo.renderer.SetInput(input)
+			// demo.renderer.SetMessages(messages)
+		default:
+			input += string(c)
+
+			// Strip ansi codes
+			input = ansiRegex.ReplaceAllString(input, "")
+
+			demo.renderer.SetInput(input)
+			// nothing for now
+		}
+	}); err != nil {
+		log.Fatal(err)
 	}
 
 	if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {

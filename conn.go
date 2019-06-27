@@ -8,8 +8,8 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp/codecs"
-	"github.com/pion/webrtc/v2/pkg/media/samplebuilder"
 	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v2/pkg/media/samplebuilder"
 )
 
 // mode for frames width per timestamp from a 30 second capture
@@ -17,8 +17,9 @@ const rtpAverageFrameWidth = 7
 
 func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn := &Conn{
-		OnPLI:   func() {},
-		OnFrame: func([]byte) {},
+		OnPLI:     func() {},
+		OnFrame:   func([]byte) {},
+		OnMessage: func(string) {},
 	}
 
 	m := webrtc.MediaEngine{}
@@ -44,6 +45,13 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 	}
 	conn.SendTrack = track
 
+	dc, err := pc.CreateDataChannel("chat", nil)
+	if err != nil {
+		return nil, err
+	}
+	conn.dc = dc
+
+	dc.OnMessage(conn.onMessage)
 	pc.OnICEConnectionStateChange(conn.onICEConnectionStateChange)
 	pc.OnTrack(conn.onTrack)
 
@@ -54,10 +62,13 @@ type Conn struct {
 	SendTrack *webrtc.Track
 	OnPLI     func()
 	OnFrame   func([]byte)
+	OnMessage func(string)
 
 	pc        *webrtc.PeerConnection
 	recvTrack *webrtc.Track
 	ssrc      uint32
+
+	dc *webrtc.DataChannel
 
 	lastPLI time.Time
 }
@@ -100,6 +111,14 @@ func (c *Conn) readRTP(track *webrtc.Track) {
 			c.OnFrame(s.Data)
 		}
 	}
+}
+
+func (c *Conn) onMessage(msg webrtc.DataChannelMessage) {
+	c.OnMessage(string(msg.Data))
+}
+
+func (c *Conn) SendMessage(m string) {
+	c.dc.SendText(m)
 }
 
 func (c *Conn) SendPLI() error {

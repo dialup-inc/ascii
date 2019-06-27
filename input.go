@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
-	"os"
 	"io"
+	"os"
 
 	"golang.org/x/sys/unix"
 )
