@@ -52,7 +52,7 @@ type Capture struct {
 }
 
 func (c *Capture) Start(camID int, frameRate float32) error {
-	return c.cam.Start(camID, c.width, c.height, frameRate)
+	return c.cam.Start(camID, c.width, c.height)
 }
 
 func (c *Capture) Stop() error {

@@ -22,8 +22,8 @@ type Camera struct {
 	callback int
 }
 
-func (c *Camera) Start(camID, width, height int, framerate float32) error {
-	if ret := C.cam_start(c.c, C.int(camID), C.int(width), C.int(height), C.float(framerate)); ret != 0 {
+func (c *Camera) Start(camID, width, height int) error {
+	if ret := C.cam_start(c.c, C.int(camID), C.int(width), C.int(height)); ret != 0 {
 		return fmt.Errorf("error %d", ret)
 	}
 	return nil
