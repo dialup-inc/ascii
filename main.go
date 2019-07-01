@@ -42,11 +42,15 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	conn.OnMessage = func(s string) {
 		d.dispatch(TypeReceivedChat, s)
 	}
+	conn.OnConnectionStateChange = func(s string) {
+		d.dispatch(TypeInfo, s)
+	}
 
 	go func() {
 		time.Sleep(5 * time.Second)
 		if err := d.capture.Start(camID, 5); err != nil {
-			fmt.Println(err)
+			d.dispatch(TypeError, fmt.Sprintf("camera error: %v", err))
+			return
 		}
 		d.capture.RequestKeyframe()
 	}()
@@ -55,7 +59,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 
 	dec, err := vpx.NewDecoder()
 	if err != nil {
-		fmt.Println(err)
+		d.dispatch(TypeError, fmt.Sprintf("encode error: %v", err))
 		cancel()
 		return err
 	}
@@ -154,8 +158,6 @@ func main() {
 	)
 	flag.Parse()
 
-	fmt.Println("starting up...")
-
 	demo, err := newDemo(640, 480)
 	if err != nil {
 		log.Fatal(err)
@@ -197,7 +199,7 @@ func main() {
 	}
 
 	if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
-		fmt.Printf("Match error: %v\n", err)
+		demo.dispatch(TypeError, fmt.Sprintf("match error: %v", err))
 		return
 	}
 

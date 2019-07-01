@@ -31,6 +31,20 @@ func StateReducer(s State, e Event) State {
 		})
 		s.Input = ""
 
+	case TypeError:
+		msg := e.Payload.(string)
+		s.Messages = append(s.Messages, Message{
+			User: "Error",
+			Text: msg,
+		})
+
+	case TypeInfo:
+		msg := e.Payload.(string)
+		s.Messages = append(s.Messages, Message{
+			User: "Info",
+			Text: msg,
+		})
+
 	case TypeKeypress:
 		chr := e.Payload.(rune)
 		s.Input += string(chr)
@@ -58,6 +72,8 @@ const (
 	TypeReceivedChat
 	TypeBackspace
 	TypeResize
+	TypeError
+	TypeInfo
 )
 
 type Event struct {

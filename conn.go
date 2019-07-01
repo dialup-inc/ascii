@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -59,10 +58,11 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 }
 
 type Conn struct {
-	SendTrack *webrtc.Track
-	OnPLI     func()
-	OnFrame   func([]byte)
-	OnMessage func(string)
+	SendTrack               *webrtc.Track
+	OnPLI                   func()
+	OnFrame                 func([]byte)
+	OnMessage               func(string)
+	OnConnectionStateChange func(string)
 
 	pc        *webrtc.PeerConnection
 	recvTrack *webrtc.Track
@@ -80,7 +80,8 @@ func (c *Conn) readRTCP(recv *webrtc.RTPReceiver) {
 			break
 		}
 		if err != nil {
-			fmt.Println(err)
+			continue
+			// fmt.Println(err)
 		}
 
 		for _, pkt := range rtcps {
@@ -101,7 +102,7 @@ func (c *Conn) readRTP(track *webrtc.Track) {
 			break
 		}
 		if err != nil {
-			fmt.Println(err)
+			// fmt.Println(err)
 			continue
 		}
 
@@ -149,5 +150,10 @@ func (c *Conn) onTrack(track *webrtc.Track, recv *webrtc.RTPReceiver) {
 }
 
 func (c *Conn) onICEConnectionStateChange(s webrtc.ICEConnectionState) {
-	fmt.Println("ICEConnectionState", s)
+	switch s {
+	case webrtc.ICEConnectionStateChecking:
+		c.OnConnectionStateChange("Connecting...")
+	case webrtc.ICEConnectionStateConnected:
+		c.OnConnectionStateChange("Connected to partner.")
+	}
 }

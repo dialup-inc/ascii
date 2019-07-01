@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -78,7 +77,7 @@ func (c *Capture) onFrame(frame []byte) {
 
 	n, err := c.enc.Encode(c.vpxBuf, frame, c.pts, forceKeyframe)
 	if err != nil {
-		fmt.Println("encode: ", err)
+		// fmt.Println("encode: ", err)
 		return
 	}
 	c.pts++
@@ -91,7 +90,7 @@ func (c *Capture) onFrame(frame []byte) {
 	}
 
 	if err := c.track.WriteSample(samp); err != nil {
-		fmt.Println("write sample: ", err)
+		// fmt.Println("write sample: ", err)
 		return
 	}
 }
