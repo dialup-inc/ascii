@@ -44,8 +44,21 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	conn.OnMessage = func(s string) {
 		d.dispatch(TypeReceivedChat, s)
 	}
-	conn.OnConnectionStateChange = func(s string) {
-		d.dispatch(TypeInfo, s)
+	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
+		switch s {
+		case webrtc.ICEConnectionStateChecking:
+			d.dispatch(TypeInfo, "Connecting...")
+
+		case webrtc.ICEConnectionStateConnected:
+			d.capture.RequestKeyframe()
+			d.dispatch(TypeInfo, "Connected")
+
+		case webrtc.ICEConnectionStateDisconnected:
+			d.dispatch(TypeInfo, "Reconnecting...")
+
+		case webrtc.ICEConnectionStateFailed:
+			d.dispatch(TypeInfo, "Lost connection")
+		}
 	}
 
 	go func() {
@@ -53,7 +66,6 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 			d.dispatch(TypeError, fmt.Sprintf("camera error: %v", err))
 			return
 		}
-		d.capture.RequestKeyframe()
 	}()
 
 	d.capture.SetTrack(conn.SendTrack)
@@ -75,10 +87,13 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		d.capture.RequestKeyframe()
 	}
 
+	d.dispatch(TypeInfo, "Searching for match...")
 	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn.pc); err != nil {
 		cancel()
 		return err
 	}
+
+	d.dispatch(TypeInfo, "Found match")
 
 	cancel()
 	return err

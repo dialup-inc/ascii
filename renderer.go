@@ -53,7 +53,7 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 
 	r.stateMu.Lock()
 	s := r.state
-	defer r.stateMu.Unlock()
+	r.stateMu.Unlock()
 
 	width, height := s.WindowCols, s.WindowRows-chatHeight
 
@@ -92,7 +92,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 
 	r.stateMu.Lock()
 	s := r.state
-	defer r.stateMu.Unlock()
+	r.stateMu.Unlock()
 
 	width := s.WindowCols
 

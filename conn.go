@@ -176,12 +176,3 @@ func (c *Conn) onTrack(track *webrtc.Track, recv *webrtc.RTPReceiver) {
 	go c.readRTCP(recv)
 	c.readRTP(track)
 }
-
-func (c *Conn) onICEConnectionStateChange(s webrtc.ICEConnectionState) {
-	switch s {
-	case webrtc.ICEConnectionStateChecking:
-		c.OnConnectionStateChange("Connecting...")
-	case webrtc.ICEConnectionStateConnected:
-		c.OnConnectionStateChange("Connected to partner.")
-	}
-}
