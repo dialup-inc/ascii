@@ -7,7 +7,7 @@ import (
 	"image"
 	"log"
 	"os"
-	"regexp"
+	"reflect"
 	"time"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
@@ -21,7 +21,8 @@ type demo struct {
 	width  int
 	height int
 
-	renderer *term.Renderer
+	renderer *Renderer
+	state    State
 
 	conn *Conn
 
@@ -38,9 +39,8 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.conn = conn
 
-	conn.OnMessage = func(m string) {
-		d.renderer.Messages = append(d.renderer.Messages, term.Message{User: "Them", Text: m})
-		d.renderer.RequestFrame()
+	conn.OnMessage = func(s string) {
+		d.dispatch(TypeReceivedChat, s)
 	}
 
 	go func() {
@@ -75,6 +75,7 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 		return err
 	}
 
+	cancel()
 	return err
 }
 
@@ -108,9 +109,24 @@ func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) err
 		Rect:           image.Rect(0, 0, d.width, d.height),
 	}
 
-	d.renderer.SetImage(img)
+	d.dispatch(TypeFrame, img)
 
 	return nil
+}
+
+func (d *demo) dispatch(t EventType, payload interface{}) {
+	switch t {
+	case TypeSendMessage:
+		if d.conn != nil {
+			d.conn.SendMessage(d.state.Input)
+		}
+	}
+
+	newState := StateReducer(d.state, Event{t, payload})
+	if !reflect.DeepEqual(d.state, newState) {
+		d.renderer.SetState(newState)
+	}
+	d.state = newState
 }
 
 func newDemo(width, height int) (*demo, error) {
@@ -122,7 +138,7 @@ func newDemo(width, height int) (*demo, error) {
 	d := &demo{
 		width:    width,
 		height:   height,
-		renderer: term.NewRenderer(),
+		renderer: NewRenderer(),
 		capture:  cap,
 	}
 	d.renderer.Start()
@@ -151,34 +167,30 @@ func main() {
 		},
 	}
 
-	ansiRegex := regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
+	checkWinSize := func() {
+		ws, err := term.GetWinSize()
+		if err != nil {
+			return
+		}
+		demo.dispatch(TypeResize, ws)
+	}
+	checkWinSize()
+	go func() {
+		for range time.Tick(500 * time.Millisecond) {
+			checkWinSize()
+		}
+	}()
 
-	var input string
 	if err := CaptureStdin(func(c rune) {
 		switch c {
 		case 3: // ctrl-c
 			os.Exit(0)
 		case 127: // backspace
-			if len(input) > 0 {
-				input = input[:len(input)-1]
-			}
-			demo.renderer.SetInput(input)
+			demo.dispatch(TypeBackspace, nil)
 		case '\n', '\r':
-			demo.renderer.Messages = append(demo.renderer.Messages, term.Message{User: "You", Text: input})
-			if demo.conn != nil {
-				demo.conn.SendMessage(input)
-			}
-			input = ""
-			demo.renderer.SetInput(input)
-			// demo.renderer.SetMessages(messages)
+			demo.dispatch(TypeSendMessage, nil)
 		default:
-			input += string(c)
-
-			// Strip ansi codes
-			input = ansiRegex.ReplaceAllString(input, "")
-
-			demo.renderer.SetInput(input)
-			// nothing for now
+			demo.dispatch(TypeKeypress, c)
 		}
 	}); err != nil {
 		log.Fatal(err)
