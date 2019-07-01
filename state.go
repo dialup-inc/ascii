@@ -24,10 +24,11 @@ func StateReducer(s State, e Event) State {
 		}
 		s.Input = s.Input[:len(s.Input)-1]
 
-	case TypeSendMessage:
+	case TypeSentMessage:
+		msg := e.Payload.(string)
 		s.Messages = append(s.Messages, Message{
 			User: "You",
-			Text: s.Input,
+			Text: msg,
 		})
 		s.Input = ""
 
@@ -67,7 +68,7 @@ type EventType int
 
 const (
 	TypeKeypress EventType = iota
-	TypeSendMessage
+	TypeSentMessage
 	TypeFrame
 	TypeReceivedChat
 	TypeBackspace

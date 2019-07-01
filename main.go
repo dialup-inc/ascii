@@ -120,13 +120,6 @@ func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) err
 }
 
 func (d *demo) dispatch(t EventType, payload interface{}) {
-	switch t {
-	case TypeSendMessage:
-		if d.conn != nil {
-			d.conn.SendMessage(d.state.Input)
-		}
-	}
-
 	newState := StateReducer(d.state, Event{t, payload})
 	if !reflect.DeepEqual(d.state, newState) {
 		d.renderer.SetState(newState)
@@ -184,6 +177,19 @@ func main() {
 		}
 	}()
 
+	sendMessage := func() {
+		if demo.conn == nil || !demo.conn.IsConnected() {
+			return
+		}
+
+		msg := demo.state.Input
+		if err := demo.conn.SendMessage(msg); err != nil {
+			demo.dispatch(TypeError, "sending message failed")
+		} else {
+			demo.dispatch(TypeSentMessage, msg)
+		}
+	}
+
 	quitChan := make(chan struct{})
 
 	if err := CaptureStdin(func(c rune) {
@@ -195,7 +201,7 @@ func main() {
 		case 127: // backspace
 			demo.dispatch(TypeBackspace, nil)
 		case '\n', '\r':
-			demo.dispatch(TypeSendMessage, nil)
+			sendMessage()
 		default:
 			demo.dispatch(TypeKeypress, c)
 		}

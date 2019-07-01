@@ -124,8 +124,8 @@ func (c *Conn) onMessage(msg webrtc.DataChannelMessage) {
 	c.OnMessage(string(msg.Data))
 }
 
-func (c *Conn) SendMessage(m string) {
-	c.dc.SendText(m)
+func (c *Conn) SendMessage(m string) error {
+	return c.dc.SendText(m)
 }
 
 func (c *Conn) SendPLI() error {
@@ -156,6 +156,15 @@ func (c *Conn) SendBye() error {
 	}
 
 	return nil
+}
+
+func (c *Conn) IsConnected() bool {
+	switch c.pc.ICEConnectionState() {
+	case webrtc.ICEConnectionStateCompleted, webrtc.ICEConnectionStateConnected:
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Conn) onTrack(track *webrtc.Track, recv *webrtc.RTPReceiver) {
