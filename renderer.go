@@ -55,15 +55,38 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 	s := r.state
 	r.stateMu.Unlock()
 
-	width, height := s.WindowCols, s.WindowRows-chatHeight
+	winW, winH := s.WindowCols, s.WindowRows-chatHeight
 
-	winRect := image.Rect(0, 0, width, height)
+	// pixels are rectangular, not square in the terminal. add a scale factor to account for this
+	winAspect := float64(s.WindowHeight) * float64(s.WindowCols) / float64(s.WindowRows) / float64(s.WindowWidth)
+
+	winRect := image.Rect(0, 0, winW, winH)
 	colors := term.ANSIPalette
 	canvas := image.NewPaletted(winRect, colors)
 
 	if s.Image != nil {
-		scaled := resize.Resize(uint(width), uint(height), s.Image, resize.Bilinear)
-		draw.Draw(canvas, scaled.Bounds(), scaled, image.ZP, draw.Over)
+		imgRect := s.Image.Bounds()
+		imgW, imgH := float64(imgRect.Dx())*winAspect, float64(imgRect.Dy())
+
+		fitW, fitH := float64(winW)/imgW, float64(winH)/imgH
+		var scaleW, scaleH uint
+		if fitW < fitH {
+			scaleW = uint(imgW * fitW)
+			scaleH = uint(imgH * fitW)
+		} else {
+			scaleW = uint(imgW * fitH)
+			scaleH = uint(imgH * fitH)
+		}
+		scaled := resize.Resize(scaleW, scaleH, s.Image, resize.Bilinear)
+
+		offsetW, offsetH := (winW-int(scaleW))/2, (winH-int(scaleH))/2
+		rect := image.Rect(
+			offsetW,
+			offsetH,
+			offsetW+int(scaleW),
+			offsetH+int(scaleH),
+		)
+		draw.Draw(canvas, rect, scaled, image.ZP, draw.Over)
 	}
 
 	a.CursorPosition(1, 1)
