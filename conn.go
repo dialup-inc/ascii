@@ -16,9 +16,11 @@ const rtpAverageFrameWidth = 7
 
 func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn := &Conn{
-		OnPLI:     func() {},
-		OnFrame:   func([]byte) {},
-		OnMessage: func(string) {},
+		OnPLI:                      func() {},
+		OnFrame:                    func([]byte) {},
+		OnMessage:                  func(string) {},
+		OnBye:                      func() {},
+		OnICEConnectionStateChange: func(webrtc.ICEConnectionState) {},
 	}
 
 	m := webrtc.MediaEngine{}
@@ -30,6 +32,9 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 		return nil, err
 	}
 	conn.pc = pc
+
+	pc.OnICEConnectionStateChange(conn.OnICEConnectionStateChange)
+	pc.OnTrack(conn.onTrack)
 
 	if _, err = pc.AddTransceiver(webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, err
@@ -51,18 +56,17 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn.dc = dc
 
 	dc.OnMessage(conn.onMessage)
-	pc.OnICEConnectionStateChange(conn.onICEConnectionStateChange)
-	pc.OnTrack(conn.onTrack)
 
 	return conn, nil
 }
 
 type Conn struct {
-	SendTrack               *webrtc.Track
-	OnPLI                   func()
-	OnFrame                 func([]byte)
-	OnMessage               func(string)
-	OnConnectionStateChange func(string)
+	SendTrack                  *webrtc.Track
+	OnPLI                      func()
+	OnFrame                    func([]byte)
+	OnMessage                  func(string)
+	OnICEConnectionStateChange func(webrtc.ICEConnectionState)
+	OnBye                      func()
 
 	pc        *webrtc.PeerConnection
 	recvTrack *webrtc.Track
@@ -88,6 +92,8 @@ func (c *Conn) readRTCP(recv *webrtc.RTPReceiver) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
 				c.OnPLI()
+			case *rtcp.Goodbye:
+				c.OnBye()
 			}
 		}
 	}
@@ -136,6 +142,19 @@ func (c *Conn) SendPLI() error {
 	}
 
 	c.lastPLI = time.Now()
+	return nil
+}
+
+func (c *Conn) SendBye() error {
+	if c.recvTrack == nil {
+		return nil
+	}
+
+	bye := &rtcp.Goodbye{Sources: []uint32{c.recvTrack.SSRC()}}
+	if err := c.pc.WriteRTCP([]rtcp.Packet{bye}); err != nil {
+		return err
+	}
+
 	return nil
 }
 

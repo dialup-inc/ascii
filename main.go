@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"os"
 	"reflect"
 	"time"
 
@@ -39,6 +38,9 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 	d.conn = conn
 
+	conn.OnBye = func() {
+		d.dispatch(TypeInfo, "Partner left")
+	}
 	conn.OnMessage = func(s string) {
 		d.dispatch(TypeReceivedChat, s)
 	}
@@ -47,7 +49,6 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	}
 
 	go func() {
-		time.Sleep(5 * time.Second)
 		if err := d.capture.Start(camID, 5); err != nil {
 			d.dispatch(TypeError, fmt.Sprintf("camera error: %v", err))
 			return
@@ -162,7 +163,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer demo.Stop()
+
 	demo.RTCConfig = webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
@@ -183,10 +184,14 @@ func main() {
 		}
 	}()
 
+	quitChan := make(chan struct{})
+
 	if err := CaptureStdin(func(c rune) {
 		switch c {
-		case 3: // ctrl-c
-			os.Exit(0)
+		case 3, 4: // ctrl-c, ctrl-d
+			quitChan <- struct{}{}
+		case 14: // ctrl-n
+
 		case 127: // backspace
 			demo.dispatch(TypeBackspace, nil)
 		case '\n', '\r':
@@ -198,10 +203,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
-		demo.dispatch(TypeError, fmt.Sprintf("match error: %v", err))
-		return
-	}
+	go func() {
+		if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
+			demo.dispatch(TypeError, fmt.Sprintf("match error: %v", err))
+			return
+		}
+	}()
 
-	select {}
+	<-quitChan
+	if demo.conn != nil && demo.conn.IsConnected() {
+		demo.conn.SendBye()
+	}
+	demo.Stop()
 }
