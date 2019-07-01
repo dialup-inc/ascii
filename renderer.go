@@ -188,7 +188,19 @@ func (r *Renderer) Start() {
 }
 
 func (r *Renderer) Stop() {
-	a := term.ANSI{os.Stdout}
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	buf := bytes.NewBuffer(nil)
+	a := term.ANSI{buf}
+
 	a.ShowCursor()
 	a.Reset()
+	a.BackgroundReset()
+	a.CursorPosition(1, 1)
+	buf.WriteString(strings.Repeat(" ", s.WindowCols*s.WindowRows))
+	a.CursorPosition(1, 1)
+
+	io.Copy(os.Stdout, buf)
 }
