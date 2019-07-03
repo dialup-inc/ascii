@@ -55,12 +55,18 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 	s := r.state
 	r.stateMu.Unlock()
 
-	winW, winH := s.WindowCols, s.WindowRows-chatHeight
+	vidW, vidH := s.WindowCols, s.WindowRows-chatHeight
 
 	// pixels are rectangular, not square in the terminal. add a scale factor to account for this
-	winAspect := float64(s.WindowHeight) * float64(s.WindowCols) / float64(s.WindowRows) / float64(s.WindowWidth)
+	windowWidth, windowHeight := s.WindowWidth, s.WindowHeight
+	windowRows, windowCols := s.WindowRows, s.WindowCols
 
-	winRect := image.Rect(0, 0, winW, winH)
+	winAspect := 2.0
+	if windowWidth > 0 && windowHeight > 0 && windowRows > 0 && windowCols > 0 {
+		winAspect = float64(windowHeight) * float64(windowCols) / float64(windowRows) / float64(windowWidth)
+	}
+
+	winRect := image.Rect(0, 0, vidW, vidH)
 	colors := term.ANSIPalette
 	canvas := image.NewPaletted(winRect, colors)
 
@@ -68,7 +74,7 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 		imgRect := s.Image.Bounds()
 		imgW, imgH := float64(imgRect.Dx())*winAspect, float64(imgRect.Dy())
 
-		fitW, fitH := float64(winW)/imgW, float64(winH)/imgH
+		fitW, fitH := float64(vidW)/imgW, float64(vidH)/imgH
 		var scaleW, scaleH uint
 		if fitW < fitH {
 			scaleW = uint(imgW * fitW)
@@ -77,9 +83,10 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 			scaleW = uint(imgW * fitH)
 			scaleH = uint(imgH * fitH)
 		}
+
 		scaled := resize.Resize(scaleW, scaleH, s.Image, resize.Bilinear)
 
-		offsetW, offsetH := (winW-int(scaleW))/2, (winH-int(scaleH))/2
+		offsetW, offsetH := (vidW-int(scaleW))/2, (vidH-int(scaleH))/2
 		rect := image.Rect(
 			offsetW,
 			offsetH,
