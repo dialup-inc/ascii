@@ -38,31 +38,32 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 	d.conn = conn
 
 	conn.OnBye = func() {
-		d.dispatch(TypeInfo, "Partner left")
+		d.dispatch(InfoEvent{"Partner left"})
 	}
 	conn.OnMessage = func(s string) {
-		d.dispatch(TypeReceivedChat, s)
+		d.dispatch(ReceivedChatEvent{s})
 	}
 	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
 		switch s {
 		case webrtc.ICEConnectionStateChecking:
-			d.dispatch(TypeInfo, "Connecting...")
+			d.dispatch(InfoEvent{"Connecting..."})
 
 		case webrtc.ICEConnectionStateConnected:
 			d.capture.RequestKeyframe()
-			d.dispatch(TypeInfo, "Connected")
+			d.dispatch(InfoEvent{"Connected"})
 
 		case webrtc.ICEConnectionStateDisconnected:
-			d.dispatch(TypeInfo, "Reconnecting...")
+			d.dispatch(InfoEvent{"Reconnecting..."})
 
 		case webrtc.ICEConnectionStateFailed:
-			d.dispatch(TypeInfo, "Lost connection")
+			d.dispatch(InfoEvent{"Lost connection"})
 		}
 	}
 
 	go func() {
 		if err := d.capture.Start(camID, 5); err != nil {
-			d.dispatch(TypeError, fmt.Sprintf("camera error: %v", err))
+			msg := fmt.Sprintf("camera error: %v", err)
+			d.dispatch(ErrorEvent{msg})
 			return
 		}
 	}()
@@ -80,19 +81,19 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 			conn.SendPLI()
 			return
 		}
-		d.dispatch(TypeFrame, img)
+		d.dispatch(FrameEvent{img})
 	}
 	conn.OnPLI = func() {
 		d.capture.RequestKeyframe()
 	}
 
-	d.dispatch(TypeInfo, "Searching for match...")
+	d.dispatch(InfoEvent{"Searching for match..."})
 	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn.pc); err != nil {
 		cancel()
 		return err
 	}
 
-	d.dispatch(TypeInfo, "Found match")
+	d.dispatch(InfoEvent{"Found match"})
 
 	cancel()
 	return err
@@ -103,8 +104,8 @@ func (d *demo) Stop() error {
 	return nil
 }
 
-func (d *demo) dispatch(t EventType, payload interface{}) {
-	newState := StateReducer(d.state, Event{t, payload})
+func (d *demo) dispatch(e Event) {
+	newState := e.Do(d.state)
 	if !reflect.DeepEqual(d.state, newState) {
 		d.renderer.SetState(newState)
 	}
@@ -146,11 +147,11 @@ func main() {
 	}
 
 	checkWinSize := func() {
-		ws, err := term.GetWinSize()
+		winSize, err := term.GetWinSize()
 		if err != nil {
 			return
 		}
-		demo.dispatch(TypeResize, ws)
+		demo.dispatch(ResizeEvent{winSize})
 	}
 	checkWinSize()
 	go func() {
@@ -166,9 +167,9 @@ func main() {
 
 		msg := demo.state.Input
 		if err := demo.conn.SendMessage(msg); err != nil {
-			demo.dispatch(TypeError, "sending message failed")
+			demo.dispatch(ErrorEvent{"sending message failed"})
 		} else {
-			demo.dispatch(TypeSentMessage, msg)
+			demo.dispatch(SentMessageEvent{msg})
 		}
 	}
 
@@ -181,18 +182,19 @@ func main() {
 		case 14: // ctrl-n
 
 		case 127: // backspace
-			demo.dispatch(TypeBackspace, nil)
+			demo.dispatch(BackspaceEvent{})
 		case '\n', '\r':
 			sendMessage()
 		default:
-			demo.dispatch(TypeKeypress, c)
+			demo.dispatch(KeypressEvent{c})
 		}
 	}); err != nil {
 		log.Fatal(err)
 	}
 
 	go func() {
-		demo.dispatch(TypeSetTitle, "Presented by dialup.com\n(we're hiring!)")
+		// Play Dialup intro
+		demo.dispatch(SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
 
 		f, err := os.Open("videos/globe.ivf")
 		if err != nil {
@@ -204,13 +206,14 @@ func main() {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(TypeFrame, img)
+			demo.dispatch(FrameEvent{img})
 		}
 		if err := player.Play(context.Background()); err != nil {
-			demo.dispatch(TypeError, err.Error())
+			demo.dispatch(ErrorEvent{err.Error()})
 		}
 
-		demo.dispatch(TypeSetTitle, "Powered by Pion")
+		// Play Pion intro
+		demo.dispatch(SetTitleEvent{"Powered by Pion"})
 
 		f, err = os.Open("videos/pion.ivf")
 		if err != nil {
@@ -222,16 +225,18 @@ func main() {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(TypeFrame, img)
+			demo.dispatch(FrameEvent{img})
 		}
 		if err := player.Play(context.Background()); err != nil {
-			demo.dispatch(TypeError, err.Error())
+			demo.dispatch(ErrorEvent{err.Error()})
 		}
 
-		demo.dispatch(TypeSetTitle, "")
+		// Attempt to find match
+		demo.dispatch(SetTitleEvent{""})
 
 		if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
-			demo.dispatch(TypeError, fmt.Sprintf("match error: %v", err))
+			msg := fmt.Sprintf("match error: %v", err)
+			demo.dispatch(ErrorEvent{msg})
 			return
 		}
 	}()

@@ -9,84 +9,6 @@ import (
 
 var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
-func StateReducer(s State, e Event) State {
-	switch e.Type {
-	case TypeResize:
-		ws := e.Payload.(term.WinSize)
-		s.WindowWidth = ws.Width
-		s.WindowHeight = ws.Height
-		s.WindowCols = ws.Cols
-		s.WindowRows = ws.Rows
-
-	case TypeBackspace:
-		if len(s.Input) == 0 {
-			return s
-		}
-		s.Input = s.Input[:len(s.Input)-1]
-
-	case TypeSentMessage:
-		msg := e.Payload.(string)
-		s.Messages = append(s.Messages, Message{
-			User: "You",
-			Text: msg,
-		})
-		s.Input = ""
-
-	case TypeError:
-		msg := e.Payload.(string)
-		s.Messages = append(s.Messages, Message{
-			User: "Error",
-			Text: msg,
-		})
-
-	case TypeInfo:
-		msg := e.Payload.(string)
-		s.Messages = append(s.Messages, Message{
-			User: "Info",
-			Text: msg,
-		})
-
-	case TypeKeypress:
-		chr := e.Payload.(rune)
-		s.Input += string(chr)
-
-		// Strip ansi codes
-		s.Input = ansiRegex.ReplaceAllString(s.Input, "")
-
-	case TypeFrame:
-		img := e.Payload.(image.Image)
-		s.Image = img
-
-	case TypeReceivedChat:
-		str := e.Payload.(string)
-		s.Messages = append(s.Messages, Message{User: "Them", Text: str})
-
-	case TypeSetTitle:
-		str := e.Payload.(string)
-		s.Title = str
-	}
-	return s
-}
-
-type EventType int
-
-const (
-	TypeKeypress EventType = iota
-	TypeSentMessage
-	TypeFrame
-	TypeReceivedChat
-	TypeBackspace
-	TypeResize
-	TypeError
-	TypeInfo
-	TypeSetTitle
-)
-
-type Event struct {
-	Type    EventType
-	Payload interface{}
-}
-
 type State struct {
 	Input    string
 	Messages []Message
@@ -103,4 +25,110 @@ type State struct {
 type Message struct {
 	User string
 	Text string
+}
+
+type Event interface {
+	Do(State) State
+}
+
+type KeypressEvent struct {
+	Char rune
+}
+
+func (e KeypressEvent) Do(s State) State {
+	s.Input += string(e.Char)
+
+	// Strip ansi codes
+	s.Input = ansiRegex.ReplaceAllString(s.Input, "")
+
+	return s
+}
+
+type SentMessageEvent struct {
+	Text string
+}
+
+func (e SentMessageEvent) Do(s State) State {
+	s.Messages = append(s.Messages, Message{
+		User: "You",
+		Text: e.Text,
+	})
+	s.Input = ""
+	return s
+}
+
+type FrameEvent struct {
+	Image image.Image
+}
+
+func (e FrameEvent) Do(s State) State {
+	s.Image = e.Image
+	return s
+}
+
+type ReceivedChatEvent struct {
+	Text string
+}
+
+func (e ReceivedChatEvent) Do(s State) State {
+	s.Messages = append(s.Messages, Message{
+		User: "Them",
+		Text: e.Text,
+	})
+	return s
+}
+
+type BackspaceEvent struct{}
+
+func (e BackspaceEvent) Do(s State) State {
+	if len(s.Input) == 0 {
+		return s
+	}
+	s.Input = s.Input[:len(s.Input)-1]
+	return s
+}
+
+type ResizeEvent struct {
+	WinSize term.WinSize
+}
+
+func (e ResizeEvent) Do(s State) State {
+	s.WindowWidth = e.WinSize.Width
+	s.WindowHeight = e.WinSize.Height
+	s.WindowCols = e.WinSize.Cols
+	s.WindowRows = e.WinSize.Rows
+	return s
+}
+
+type ErrorEvent struct {
+	Text string
+}
+
+func (e ErrorEvent) Do(s State) State {
+	s.Messages = append(s.Messages, Message{
+		User: "Info",
+		Text: e.Text,
+	})
+	return s
+}
+
+type InfoEvent struct {
+	Text string
+}
+
+func (e InfoEvent) Do(s State) State {
+	s.Messages = append(s.Messages, Message{
+		User: "Info",
+		Text: e.Text,
+	})
+	return s
+}
+
+type SetTitleEvent struct {
+	Title string
+}
+
+func (e SetTitleEvent) Do(s State) State {
+	s.Title = e.Title
+	return s
 }
