@@ -147,8 +147,10 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	drawChatLine := func(m Message) {
 		if m.User == "You" {
 			a.Foreground(color.RGBA{0xFF, 0xFF, 0, 0xFF})
-		} else {
+		} else if m.User == "Them" {
 			a.Foreground(color.RGBA{0xFF, 0, 0, 0xFF})
+		} else {
+			a.Foreground(color.RGBA{0x99, 0x99, 0x99, 0xFF})
 		}
 
 		buf.WriteString(" ")
