@@ -160,6 +160,8 @@ func main() {
 		}
 	}()
 
+	var skipIntro func()
+
 	sendMessage := func() {
 		if demo.conn == nil || !demo.conn.IsConnected() {
 			return
@@ -180,11 +182,17 @@ func main() {
 		case 3, 4: // ctrl-c, ctrl-d
 			quitChan <- struct{}{}
 		case 14: // ctrl-n
-
+			return
 		case 127: // backspace
 			demo.dispatch(BackspaceEvent{})
 		case '\n', '\r':
 			sendMessage()
+		case ' ':
+			if skipIntro != nil {
+				skipIntro()
+				skipIntro = nil
+			}
+			demo.dispatch(KeypressEvent{c})
 		default:
 			demo.dispatch(KeypressEvent{c})
 		}
@@ -193,6 +201,9 @@ func main() {
 	}
 
 	go func() {
+		var introCtx context.Context
+		introCtx, skipIntro = context.WithCancel(context.Background())
+
 		// Play Dialup intro
 		demo.dispatch(SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
 
@@ -208,9 +219,7 @@ func main() {
 		player.OnFrame = func(img image.Image) {
 			demo.dispatch(FrameEvent{img})
 		}
-		if err := player.Play(context.Background()); err != nil {
-			demo.dispatch(ErrorEvent{err.Error()})
-		}
+		player.Play(introCtx)
 
 		// Play Pion intro
 		demo.dispatch(SetTitleEvent{"Powered by Pion"})
@@ -227,9 +236,7 @@ func main() {
 		player.OnFrame = func(img image.Image) {
 			demo.dispatch(FrameEvent{img})
 		}
-		if err := player.Play(context.Background()); err != nil {
-			demo.dispatch(ErrorEvent{err.Error()})
-		}
+		player.Play(introCtx)
 
 		// Attempt to find match
 		demo.dispatch(SetTitleEvent{""})
