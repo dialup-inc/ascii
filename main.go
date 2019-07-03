@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"os"
 	"reflect"
 	"time"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialupdotcom/ascii_roulette/videos"
 	"github.com/pion/webrtc/v2"
 )
 
@@ -207,12 +207,7 @@ func main() {
 		// Play Dialup intro
 		demo.dispatch(SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
 
-		f, err := os.Open("videos/globe.ivf")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-		player, err := NewPlayer(f)
+		player, err := NewPlayer(videos.Globe())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -224,12 +219,7 @@ func main() {
 		// Play Pion intro
 		demo.dispatch(SetTitleEvent{"Powered by Pion"})
 
-		f, err = os.Open("videos/pion.ivf")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-		player, err = NewPlayer(f)
+		player, err = NewPlayer(videos.Pion())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -239,6 +229,7 @@ func main() {
 		player.Play(introCtx)
 
 		// Attempt to find match
+		demo.dispatch(FrameEvent{nil})
 		demo.dispatch(SetTitleEvent{""})
 
 		if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {

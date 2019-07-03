@@ -16,6 +16,7 @@ require (
 	github.com/pion/rtcp v1.2.1
 	github.com/pion/rtp v1.1.2
 	github.com/pion/webrtc/v2 v2.0.22
+	github.com/shuLhan/go-bindata v3.4.0+incompatible // indirect
 	golang.org/x/crypto v0.0.0-20190621222207-cc06ce4a13d4 // indirect
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859 // indirect
 	golang.org/x/sys v0.0.0-20190626150813-e07cf5db2756
