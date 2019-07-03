@@ -27,19 +27,27 @@ type demo struct {
 	capture *Capture
 }
 
-func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
+func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason string, err error) {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	frameTimeout := time.NewTimer(999 * time.Hour)
+	frameTimeout.Stop()
+
+	connectTimeout := time.NewTimer(999 * time.Hour)
+	connectTimeout.Stop()
+
+	ended := make(chan string)
 
 	conn, err := NewConn(d.RTCConfig)
 	if err != nil {
-		cancel()
-		return err
+		return "", err
 	}
 	d.conn = conn
 
 	conn.OnBye = func() {
 		d.dispatch(FrameEvent{nil})
-		d.dispatch(InfoEvent{"Partner left"})
+		ended <- "Partner left"
 	}
 	conn.OnMessage = func(s string) {
 		d.dispatch(ReceivedChatEvent{s})
@@ -51,13 +59,14 @@ func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
 
 		case webrtc.ICEConnectionStateConnected:
 			d.capture.RequestKeyframe()
+			connectTimeout.Stop()
 			d.dispatch(InfoEvent{"Connected"})
 
 		case webrtc.ICEConnectionStateDisconnected:
 			d.dispatch(InfoEvent{"Reconnecting..."})
 
 		case webrtc.ICEConnectionStateFailed:
-			d.dispatch(InfoEvent{"Lost connection"})
+			ended <- "Lost connection"
 		}
 	}
 
@@ -65,10 +74,11 @@ func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
 
 	dec, err := NewDecoder(320, 240)
 	if err != nil {
-		cancel()
-		return err
+		return "", err
 	}
 	conn.OnFrame = func(frame []byte) {
+		frameTimeout.Reset(5 * time.Second)
+
 		img, err := dec.Decode(frame)
 		if err != nil {
 			conn.SendPLI()
@@ -83,13 +93,23 @@ func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
 	d.dispatch(InfoEvent{"Searching for match..."})
 	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn.pc); err != nil {
 		cancel()
-		return err
+		return "", err
 	}
+
+	connectTimeout.Reset(15 * time.Second)
 
 	d.dispatch(InfoEvent{"Found match"})
 
-	cancel()
-	return err
+	select {
+	case <-ctx.Done():
+		return "", nil
+	case <-connectTimeout.C:
+		return "Connection timed out", nil
+	case <-frameTimeout.C:
+		return "Lost connection", nil
+	case reason := <-ended:
+		return reason, nil
+	}
 }
 
 func (d *demo) Stop() error {
@@ -232,10 +252,16 @@ func main() {
 			return
 		}
 
-		if err := demo.Match(context.Background(), *signalerURL, *room); err != nil {
-			msg := fmt.Sprintf("match error: %v", err)
-			demo.dispatch(ErrorEvent{msg})
-			return
+		for {
+			skipReason, err := demo.Connect(context.Background(), *signalerURL, *room)
+			if err != nil {
+				demo.dispatch(ErrorEvent{err.Error()})
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			demo.dispatch(InfoEvent{skipReason})
+
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 
