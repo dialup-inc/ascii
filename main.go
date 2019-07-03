@@ -157,7 +157,7 @@ func main() {
 	var (
 		camID       = flag.Int("cam-id", 0, "cam-id used by OpenCV's VideoCapture.open()")
 		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
-		room        = flag.String("room", "pion5", "Name of room to join ")
+		room        = flag.String("room", "main", "Name of room to join ")
 	)
 	flag.Parse()
 
