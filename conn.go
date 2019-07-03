@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"sync/atomic"
 	"time"
@@ -13,6 +14,11 @@ import (
 
 // mode for frames width per timestamp from a 30 second capture
 const rtpAverageFrameWidth = 7
+
+type DCMessage struct {
+	Event   string
+	Payload []byte
+}
 
 func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn := &Conn{
@@ -121,11 +127,24 @@ func (c *Conn) readRTP(track *webrtc.Track) {
 }
 
 func (c *Conn) onMessage(msg webrtc.DataChannelMessage) {
-	c.OnMessage(string(msg.Data))
+	var dcm DCMessage
+	if err := json.Unmarshal(msg.Data, &dcm); err != nil {
+		// TODO
+	}
+	if dcm.Event == "chat" {
+		c.OnMessage(string(dcm.Payload))
+	}
 }
 
 func (c *Conn) SendMessage(m string) error {
-	return c.dc.SendText(m)
+	data, err := json.Marshal(DCMessage{
+		Event:   "chat",
+		Payload: []byte(m),
+	})
+	if err != nil {
+		return err
+	}
+	return c.dc.Send(data)
 }
 
 func (c *Conn) SendPLI() error {
