@@ -38,6 +38,7 @@ func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
 	d.conn = conn
 
 	conn.OnBye = func() {
+		d.dispatch(FrameEvent{nil})
 		d.dispatch(InfoEvent{"Partner left"})
 	}
 	conn.OnMessage = func(s string) {
