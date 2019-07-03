@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -39,14 +40,14 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 	}
 	conn.pc = pc
 
-	pc.OnICEConnectionStateChange(conn.OnICEConnectionStateChange)
+	pc.OnICEConnectionStateChange(conn.onICEConnectionStateChange)
 	pc.OnTrack(conn.onTrack)
 
 	if _, err = pc.AddTransceiver(webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, err
 	}
 
-	track, err := pc.NewTrack(webrtc.DefaultPayloadTypeVP8, 1234, "video", "roulette")
+	track, err := pc.NewTrack(webrtc.DefaultPayloadTypeVP8, rand.Uint32(), "video", "roulette")
 	if err != nil {
 		return nil, err
 	}
@@ -95,11 +96,16 @@ func (c *Conn) readRTCP(recv *webrtc.RTPReceiver) {
 		}
 
 		for _, pkt := range rtcps {
-			switch pkt.(type) {
+			switch p := pkt.(type) {
 			case *rtcp.PictureLossIndication:
 				c.OnPLI()
 			case *rtcp.Goodbye:
-				c.OnBye()
+				for _, ssrc := range p.Sources {
+					if ssrc == recv.Track().SSRC() {
+						c.OnBye()
+						break
+					}
+				}
 			}
 		}
 	}
@@ -136,6 +142,10 @@ func (c *Conn) onMessage(msg webrtc.DataChannelMessage) {
 	}
 }
 
+func (c *Conn) onICEConnectionStateChange(s webrtc.ICEConnectionState) {
+	c.OnICEConnectionStateChange(s)
+}
+
 func (c *Conn) SendMessage(m string) error {
 	data, err := json.Marshal(DCMessage{
 		Event:   "chat",
@@ -155,7 +165,7 @@ func (c *Conn) SendPLI() error {
 		return nil
 	}
 
-	pli := &rtcp.PictureLossIndication{MediaSSRC: c.recvTrack.SSRC()}
+	pli := &rtcp.PictureLossIndication{MediaSSRC: c.SendTrack.SSRC()}
 	if err := c.pc.WriteRTCP([]rtcp.Packet{pli}); err != nil {
 		return err
 	}
@@ -165,11 +175,11 @@ func (c *Conn) SendPLI() error {
 }
 
 func (c *Conn) SendBye() error {
-	if c.recvTrack == nil {
+	if c.SendTrack == nil {
 		return nil
 	}
 
-	bye := &rtcp.Goodbye{Sources: []uint32{c.recvTrack.SSRC()}}
+	bye := &rtcp.Goodbye{Sources: []uint32{c.SendTrack.SSRC()}}
 	if err := c.pc.WriteRTCP([]rtcp.Packet{bye}); err != nil {
 		return err
 	}

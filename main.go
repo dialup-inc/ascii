@@ -46,6 +46,20 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 	}
 	d.conn = conn
 
+	defer func() {
+		// Turn off callbacks
+		conn.OnBye = func() {}
+		conn.OnMessage = func(string) {}
+		conn.OnICEConnectionStateChange = func(webrtc.ICEConnectionState) {}
+		conn.OnFrame = func([]byte) {}
+		conn.OnPLI = func() {}
+
+		// Send Goodbye packet
+		if conn.IsConnected() {
+			conn.SendBye()
+		}
+	}()
+
 	conn.OnBye = func() {
 		d.dispatch(FrameEvent{nil})
 		ended <- "Partner left"
@@ -55,13 +69,10 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 	}
 	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
 		switch s {
-		case webrtc.ICEConnectionStateChecking:
-			d.dispatch(InfoEvent{"Connecting..."})
-
 		case webrtc.ICEConnectionStateConnected:
 			d.capture.RequestKeyframe()
 			connectTimeout.Stop()
-			d.dispatch(InfoEvent{"Connected"})
+			d.dispatch(InfoEvent{"Connected (type ctrl-d to skip)"})
 
 		case webrtc.ICEConnectionStateDisconnected:
 			d.dispatch(InfoEvent{"Reconnecting..."})
@@ -79,6 +90,7 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 	}
 	conn.OnFrame = func(frame []byte) {
 		frameTimeout.Reset(5 * time.Second)
+		connectTimeout.Stop()
 
 		img, err := dec.Decode(frame)
 		if err != nil {
@@ -97,9 +109,9 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 		return "", err
 	}
 
-	connectTimeout.Reset(15 * time.Second)
+	connectTimeout.Reset(10 * time.Second)
 
-	d.dispatch(InfoEvent{"Found match"})
+	d.dispatch(InfoEvent{"Found match. Connecting..."})
 
 	select {
 	case <-ctx.Done():
@@ -175,6 +187,7 @@ func main() {
 	}()
 
 	var skipIntro func()
+	var nextPartner func()
 
 	sendMessage := func() {
 		if demo.conn == nil || !demo.conn.IsConnected() {
@@ -193,10 +206,13 @@ func main() {
 
 	if err := CaptureStdin(func(c rune) {
 		switch c {
-		case 3, 4: // ctrl-c, ctrl-d
+		case 3: // ctrl-c
 			quitChan <- struct{}{}
-		case 14: // ctrl-n
-			return
+		case 4: // ctrl-d
+			if nextPartner != nil {
+				nextPartner()
+				nextPartner = nil
+			}
 		case 127: // backspace
 			demo.dispatch(BackspaceEvent{})
 		case '\n', '\r':
@@ -255,7 +271,10 @@ func main() {
 
 		var backoff float64
 		for {
-			skipReason, err := demo.Connect(context.Background(), *signalerURL, *room)
+			var connCtx context.Context
+			connCtx, nextPartner = context.WithCancel(context.Background())
+
+			skipReason, err := demo.Connect(connCtx, *signalerURL, *room)
 			if err != nil {
 				demo.dispatch(ErrorEvent{err.Error()})
 
@@ -267,6 +286,7 @@ func main() {
 				continue
 			}
 			demo.dispatch(InfoEvent{skipReason})
+			demo.dispatch(FrameEvent{nil})
 
 			time.Sleep(100 * time.Millisecond)
 		}
