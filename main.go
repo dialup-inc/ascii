@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"os"
 	"reflect"
 	"time"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
-	"github.com/dialupdotcom/ascii_roulette/vpx"
 	"github.com/pion/webrtc/v2"
 )
 
 type demo struct {
 	RTCConfig webrtc.Configuration
 
-	width  int
-	height int
+	decoder Decoder
 
 	renderer *Renderer
 	state    State
@@ -70,18 +69,18 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 
 	d.capture.SetTrack(conn.SendTrack)
 
-	dec, err := vpx.NewDecoder()
+	dec, err := NewDecoder(320, 240)
 	if err != nil {
-		d.dispatch(TypeError, fmt.Sprintf("encode error: %v", err))
 		cancel()
 		return err
 	}
-
-	frameBuf := make([]byte, d.width*d.height*4)
 	conn.OnFrame = func(frame []byte) {
-		if err := d.decode(dec, frameBuf, frame); err != nil {
+		img, err := dec.Decode(frame)
+		if err != nil {
 			conn.SendPLI()
+			return
 		}
+		d.dispatch(TypeFrame, img)
 	}
 	conn.OnPLI = func() {
 		d.capture.RequestKeyframe()
@@ -104,36 +103,6 @@ func (d *demo) Stop() error {
 	return nil
 }
 
-func (d *demo) decode(decoder *vpx.Decoder, frameBuf []byte, payload []byte) error {
-	if len(payload) == 0 {
-		return nil
-	}
-
-	n, err := decoder.Decode(frameBuf, payload)
-	if err != nil {
-		return err
-	}
-	frame := frameBuf[:n]
-
-	yi := d.width * d.height
-	cbi := yi + d.width*d.height/4
-	cri := cbi + d.width*d.height/4
-
-	img := &image.YCbCr{
-		Y:              frame[:yi],
-		YStride:        d.width,
-		Cb:             frame[yi:cbi],
-		Cr:             frame[cbi:cri],
-		CStride:        d.width / 2,
-		SubsampleRatio: image.YCbCrSubsampleRatio420,
-		Rect:           image.Rect(0, 0, d.width, d.height),
-	}
-
-	d.dispatch(TypeFrame, img)
-
-	return nil
-}
-
 func (d *demo) dispatch(t EventType, payload interface{}) {
 	newState := StateReducer(d.state, Event{t, payload})
 	if !reflect.DeepEqual(d.state, newState) {
@@ -142,15 +111,13 @@ func (d *demo) dispatch(t EventType, payload interface{}) {
 	d.state = newState
 }
 
-func newDemo(width, height int) (*demo, error) {
-	cap, err := NewCapture(width, height)
+func newDemo() (*demo, error) {
+	cap, err := NewCapture(320, 240)
 	if err != nil {
 		return nil, err
 	}
 
 	d := &demo{
-		width:    width,
-		height:   height,
 		renderer: NewRenderer(),
 		capture:  cap,
 	}
@@ -167,7 +134,7 @@ func main() {
 	)
 	flag.Parse()
 
-	demo, err := newDemo(640, 480)
+	demo, err := newDemo()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -225,6 +192,44 @@ func main() {
 	}
 
 	go func() {
+		demo.dispatch(TypeSetTitle, "Presented by dialup.com\n(we're hiring!)")
+
+		f, err := os.Open("videos/globe.ivf")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		player, err := NewPlayer(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		player.OnFrame = func(img image.Image) {
+			demo.dispatch(TypeFrame, img)
+		}
+		if err := player.Play(context.Background()); err != nil {
+			demo.dispatch(TypeError, err.Error())
+		}
+
+		demo.dispatch(TypeSetTitle, "Powered by Pion")
+
+		f, err = os.Open("videos/pion.ivf")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		player, err = NewPlayer(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		player.OnFrame = func(img image.Image) {
+			demo.dispatch(TypeFrame, img)
+		}
+		if err := player.Play(context.Background()); err != nil {
+			demo.dispatch(TypeError, err.Error())
+		}
+
+		demo.dispatch(TypeSetTitle, "")
+
 		if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
 			demo.dispatch(TypeError, fmt.Sprintf("match error: %v", err))
 			return

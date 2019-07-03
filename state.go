@@ -60,6 +60,10 @@ func StateReducer(s State, e Event) State {
 	case TypeReceivedChat:
 		str := e.Payload.(string)
 		s.Messages = append(s.Messages, Message{User: "Them", Text: str})
+
+	case TypeSetTitle:
+		str := e.Payload.(string)
+		s.Title = str
 	}
 	return s
 }
@@ -75,6 +79,7 @@ const (
 	TypeResize
 	TypeError
 	TypeInfo
+	TypeSetTitle
 )
 
 type Event struct {
@@ -86,6 +91,8 @@ type State struct {
 	Input    string
 	Messages []Message
 	Image    image.Image
+
+	Title string
 
 	WindowWidth  int
 	WindowHeight int

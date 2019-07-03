@@ -189,10 +189,50 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.BlinkOff()
 }
 
+func (r *Renderer) drawTitle(buf *bytes.Buffer) {
+	a := term.ANSI{buf}
+
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	// Draw background
+	a.Bold()
+
+	lines := strings.Split(s.Title, "\n")
+	var title1 string
+	if len(lines) > 0 {
+		title1 = lines[0]
+	}
+	var title2 string
+	if len(lines) > 1 {
+		title2 = lines[1]
+	}
+
+	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
+	buf.WriteString(strings.Repeat(" ", s.WindowCols*chatHeight))
+
+	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
+	a.CursorPosition(s.WindowRows-2, (s.WindowCols-len(title1))/2+1)
+	buf.WriteString(title1)
+
+	a.Foreground(color.RGBA{0x00, 0x55, 0x55, 0xff})
+	a.CursorPosition(s.WindowRows-1, (s.WindowCols-len(title2))/2+1)
+	buf.WriteString(title2)
+}
+
 func (r *Renderer) draw() {
 	buf := bytes.NewBuffer(nil)
 
-	r.drawChat(buf)
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	if s.Title == "" {
+		r.drawChat(buf)
+	} else {
+		r.drawTitle(buf)
+	}
 	r.drawVideo(buf)
 
 	io.Copy(os.Stdout, buf)
