@@ -228,6 +228,8 @@ func (r *Renderer) Stop() {
 	a.ShowCursor()
 	a.Reset()
 	a.BackgroundReset()
+	a.ForegroundReset()
+	a.Normal()
 	a.CursorPosition(1, 1)
 	buf.WriteString(strings.Repeat(" ", s.WindowCols*s.WindowRows))
 	a.CursorPosition(1, 1)
