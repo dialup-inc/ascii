@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"log"
+	"math"
 	"reflect"
 	"time"
 
@@ -91,8 +92,8 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 	}
 
 	d.dispatch(InfoEvent{"Searching for match..."})
-	if err := match(ctx, fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room), conn.pc); err != nil {
-		cancel()
+	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
+	if err := match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
 	}
 
@@ -252,11 +253,17 @@ func main() {
 			return
 		}
 
+		var backoff float64
 		for {
 			skipReason, err := demo.Connect(context.Background(), *signalerURL, *room)
 			if err != nil {
 				demo.dispatch(ErrorEvent{err.Error()})
-				time.Sleep(1 * time.Second)
+
+				sec := math.Pow(2, backoff) - 1
+				time.Sleep(time.Duration(sec) * time.Second)
+				if backoff < 4 {
+					backoff++
+				}
 				continue
 			}
 			demo.dispatch(InfoEvent{skipReason})
