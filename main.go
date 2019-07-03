@@ -27,7 +27,7 @@ type demo struct {
 	capture *Capture
 }
 
-func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) error {
+func (d *demo) Match(ctx context.Context, signalerURL, room string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	conn, err := NewConn(d.RTCConfig)
@@ -59,14 +59,6 @@ func (d *demo) Match(ctx context.Context, camID int, signalerURL, room string) e
 			d.dispatch(InfoEvent{"Lost connection"})
 		}
 	}
-
-	go func() {
-		if err := d.capture.Start(camID, 5); err != nil {
-			msg := fmt.Sprintf("camera error: %v", err)
-			d.dispatch(ErrorEvent{msg})
-			return
-		}
-	}()
 
 	d.capture.SetTrack(conn.SendTrack)
 
@@ -232,7 +224,14 @@ func main() {
 		demo.dispatch(FrameEvent{nil})
 		demo.dispatch(SetTitleEvent{""})
 
-		if err := demo.Match(context.Background(), *camID, *signalerURL, *room); err != nil {
+		if err := demo.capture.Start(*camID, 5); err != nil {
+			msg := fmt.Sprintf("camera error: %v", err)
+			demo.dispatch(ErrorEvent{msg})
+			// TODO: show in ui and retry
+			return
+		}
+
+		if err := demo.Match(context.Background(), *signalerURL, *room); err != nil {
 			msg := fmt.Sprintf("match error: %v", err)
 			demo.dispatch(ErrorEvent{msg})
 			return
