@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"regexp"
+	"strings"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
 )
@@ -40,6 +41,9 @@ func (e KeypressEvent) Do(s State) State {
 
 	// Strip ansi codes
 	s.Input = ansiRegex.ReplaceAllString(s.Input, "")
+
+	// Strip bell characters
+	s.Input = strings.Replace(s.Input, "\a", "")
 
 	return s
 }
