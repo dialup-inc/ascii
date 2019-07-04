@@ -65,6 +65,7 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 		ended <- "Partner left"
 	}
 	conn.OnMessage = func(s string) {
+		fmt.Print("\a") // beep
 		d.dispatch(ReceivedChatEvent{s})
 	}
 	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
