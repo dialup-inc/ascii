@@ -7,7 +7,6 @@ import (
 	"image"
 	"log"
 	"math"
-	"reflect"
 	"sync"
 	"time"
 
@@ -39,7 +38,6 @@ type App struct {
 	nextPartner context.CancelFunc
 
 	renderer *ui.Renderer
-	state    ui.State
 
 	conn *Conn
 
@@ -70,35 +68,35 @@ func (a *App) run(ctx context.Context) error {
 	a.cancelMu.Unlock()
 
 	// Play Dialup intro
-	a.dispatch(ui.SetPageEvent(ui.GlobePage))
+	a.renderer.Dispatch(ui.SetPageEvent(ui.GlobePage))
 
 	player, err := videos.NewPlayer(videos.Globe())
 	if err != nil {
 		log.Fatal(err)
 	}
 	player.OnFrame = func(img image.Image) {
-		a.dispatch(ui.FrameEvent{img})
+		a.renderer.Dispatch(ui.FrameEvent{img})
 	}
 	player.Play(introCtx)
 
 	// Play Pion intro
-	a.dispatch(ui.SetPageEvent(ui.PionPage))
+	a.renderer.Dispatch(ui.SetPageEvent(ui.PionPage))
 
 	player, err = videos.NewPlayer(videos.Pion())
 	if err != nil {
 		log.Fatal(err)
 	}
 	player.OnFrame = func(img image.Image) {
-		a.dispatch(ui.FrameEvent{img})
+		a.renderer.Dispatch(ui.FrameEvent{img})
 	}
 	player.Play(introCtx)
 
 	// Attempt to find match
-	a.dispatch(ui.SetPageEvent(ui.ChatPage))
+	a.renderer.Dispatch(ui.SetPageEvent(ui.ChatPage))
 
 	if err := a.capture.Start(0, 5); err != nil {
 		msg := fmt.Sprintf("camera error: %v", err)
-		a.dispatch(ui.ErrorEvent{msg})
+		a.renderer.Dispatch(ui.ErrorEvent{msg})
 		// TODO: show in ui and retry
 		return err
 	}
@@ -121,7 +119,7 @@ func (a *App) run(ctx context.Context) error {
 			break
 		}
 		if err != nil {
-			a.dispatch(ui.ErrorEvent{err.Error()})
+			a.renderer.Dispatch(ui.ErrorEvent{err.Error()})
 
 			sec := math.Pow(2, backoff) - 1
 			time.Sleep(time.Duration(sec) * time.Second)
@@ -130,8 +128,8 @@ func (a *App) run(ctx context.Context) error {
 			}
 			continue
 		}
-		a.dispatch(ui.InfoEvent{skipReason})
-		a.dispatch(ui.FrameEvent{nil})
+		a.renderer.Dispatch(ui.InfoEvent{skipReason})
+		a.renderer.Dispatch(ui.FrameEvent{nil})
 
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -157,7 +155,7 @@ func (a *App) watchWinSize(ctx context.Context) error {
 		if err != nil {
 			return
 		}
-		a.dispatch(ui.ResizeEvent{winSize})
+		a.renderer.Dispatch(ui.ResizeEvent{winSize})
 	}
 
 	checkWinSize()
@@ -178,11 +176,11 @@ func (a *App) sendMessage() {
 		return
 	}
 
-	msg := a.state.Input
+	msg := a.renderer.GetState().Input
 	if err := a.conn.SendMessage(msg); err != nil {
-		a.dispatch(ui.ErrorEvent{"sending message failed"})
+		a.renderer.Dispatch(ui.ErrorEvent{"sending message failed"})
 	} else {
-		a.dispatch(ui.SentMessageEvent{msg})
+		a.renderer.Dispatch(ui.SentMessageEvent{msg})
 	}
 }
 func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason string, err error) {
@@ -218,21 +216,21 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 	}()
 
 	conn.OnBye = func() {
-		a.dispatch(ui.FrameEvent{nil})
+		a.renderer.Dispatch(ui.FrameEvent{nil})
 		ended <- "Partner left"
 	}
 	conn.OnMessage = func(s string) {
-		a.dispatch(ui.ReceivedChatEvent{s})
+		a.renderer.Dispatch(ui.ReceivedChatEvent{s})
 	}
 	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
 		switch s {
 		case webrtc.ICEConnectionStateConnected:
 			a.capture.RequestKeyframe()
 			connectTimeout.Stop()
-			a.dispatch(ui.InfoEvent{"Connected (type ctrl-d to skip)"})
+			a.renderer.Dispatch(ui.InfoEvent{"Connected (type ctrl-d to skip)"})
 
 		case webrtc.ICEConnectionStateDisconnected:
-			a.dispatch(ui.InfoEvent{"Reconnecting..."})
+			a.renderer.Dispatch(ui.InfoEvent{"Reconnecting..."})
 
 		case webrtc.ICEConnectionStateFailed:
 			ended <- "Lost connection"
@@ -254,13 +252,13 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 			conn.SendPLI()
 			return
 		}
-		a.dispatch(ui.FrameEvent{img})
+		a.renderer.Dispatch(ui.FrameEvent{img})
 	}
 	conn.OnPLI = func() {
 		a.capture.RequestKeyframe()
 	}
 
-	a.dispatch(ui.InfoEvent{"Searching for match..."})
+	a.renderer.Dispatch(ui.InfoEvent{"Searching for match..."})
 	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
 	if err := signal.Match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
@@ -268,7 +266,7 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 
 	connectTimeout.Reset(10 * time.Second)
 
-	a.dispatch(ui.InfoEvent{"Found match. Connecting..."})
+	a.renderer.Dispatch(ui.InfoEvent{"Found match. Connecting..."})
 
 	select {
 	case <-ctx.Done():
@@ -285,7 +283,7 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 func (a *App) onKeypress(c rune) {
 	switch c {
 	case 3: // ctrl-c
-		a.dispatch(ui.InfoEvent{"Quitting..."})
+		a.renderer.Dispatch(ui.InfoEvent{"Quitting..."})
 
 		a.cancelMu.Lock()
 		if a.quit != nil {
@@ -302,7 +300,7 @@ func (a *App) onKeypress(c rune) {
 		a.cancelMu.Unlock()
 
 	case 127: // backspace
-		a.dispatch(ui.BackspaceEvent{})
+		a.renderer.Dispatch(ui.BackspaceEvent{})
 
 	case '\n', '\r':
 		a.sendMessage()
@@ -315,19 +313,11 @@ func (a *App) onKeypress(c rune) {
 		}
 		a.cancelMu.Unlock()
 
-		a.dispatch(ui.KeypressEvent{c})
+		a.renderer.Dispatch(ui.KeypressEvent{c})
 
 	default:
-		a.dispatch(ui.KeypressEvent{c})
+		a.renderer.Dispatch(ui.KeypressEvent{c})
 	}
-}
-
-func (a *App) dispatch(e ui.Event) {
-	newState := ui.StateReducer(a.state, e)
-	if !reflect.DeepEqual(a.state, newState) {
-		a.renderer.SetState(newState)
-	}
-	a.state = newState
 }
 
 func New(signalerURL, room string) (*App, error) {

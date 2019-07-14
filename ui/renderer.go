@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -33,12 +34,26 @@ type Renderer struct {
 	state   State
 }
 
-func (r *Renderer) SetState(s State) {
+func (r *Renderer) GetState() State {
 	r.stateMu.Lock()
-	r.state = s
+	defer r.stateMu.Unlock()
+
+	return r.state
+}
+
+func (r *Renderer) Dispatch(e Event) {
+	r.stateMu.Lock()
+	newState := StateReducer(r.state, e)
+	var changed bool
+	if !reflect.DeepEqual(r.state, newState) {
+		changed = true
+	}
+	r.state = newState
 	r.stateMu.Unlock()
 
-	r.RequestFrame()
+	if changed {
+		r.RequestFrame()
+	}
 }
 
 func (r *Renderer) RequestFrame() {
