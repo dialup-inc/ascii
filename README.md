@@ -5,3 +5,18 @@
 [![Build Status](https://travis-ci.org/dialupdotcom/ascii_roulette.svg?branch=master)](https://travis-ci.org/dialupdotcom/ascii_roulette)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dialupdotcom/ascii_roulette?)](https://goreportcard.com/report/github.com/dialupdotcom/ascii_roulette)
 [![GoDoc](https://godoc.org/github.com/dialupdotcom/ascii_roulette?status.svg)](https://godoc.org/github.com/dialupdotcom/ascii_roulette)
+
+## Installing
+
+The fast way:
+```sh
+# Paste this command into your terminal to install
+bash <(curl https://dialup.com/ascii)
+```
+
+From source:
+```sh
+git clone https://github.com/dialupdotcom/ascii_roulette.git
+cd ascii_roulette
+make
+```
