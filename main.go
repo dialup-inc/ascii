@@ -205,7 +205,7 @@ func main() {
 
 	quitChan := make(chan struct{})
 
-	if err := CaptureStdin(func(c rune) {
+	if err := term.CaptureStdin(func(c rune) {
 		switch c {
 		case 3: // ctrl-c
 			quitChan <- struct{}{}
