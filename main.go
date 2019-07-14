@@ -131,7 +131,7 @@ func (d *demo) Stop() error {
 }
 
 func (d *demo) dispatch(e Event) {
-	newState := e.Do(d.state)
+	newState := StateReducer(d.state, e)
 	if !reflect.DeepEqual(d.state, newState) {
 		d.renderer.SetState(newState)
 	}
