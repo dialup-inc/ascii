@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialupdotcom/ascii_roulette/ui"
 	"github.com/dialupdotcom/ascii_roulette/videos"
 	"github.com/pion/webrtc/v2"
 )
@@ -20,8 +21,8 @@ type demo struct {
 
 	decoder Decoder
 
-	renderer *Renderer
-	state    State
+	renderer *ui.Renderer
+	state    ui.State
 
 	conn *Conn
 
@@ -61,21 +62,21 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 	}()
 
 	conn.OnBye = func() {
-		d.dispatch(FrameEvent{nil})
+		d.dispatch(ui.FrameEvent{nil})
 		ended <- "Partner left"
 	}
 	conn.OnMessage = func(s string) {
-		d.dispatch(ReceivedChatEvent{s})
+		d.dispatch(ui.ReceivedChatEvent{s})
 	}
 	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
 		switch s {
 		case webrtc.ICEConnectionStateConnected:
 			d.capture.RequestKeyframe()
 			connectTimeout.Stop()
-			d.dispatch(InfoEvent{"Connected (type ctrl-d to skip)"})
+			d.dispatch(ui.InfoEvent{"Connected (type ctrl-d to skip)"})
 
 		case webrtc.ICEConnectionStateDisconnected:
-			d.dispatch(InfoEvent{"Reconnecting..."})
+			d.dispatch(ui.InfoEvent{"Reconnecting..."})
 
 		case webrtc.ICEConnectionStateFailed:
 			ended <- "Lost connection"
@@ -97,13 +98,13 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 			conn.SendPLI()
 			return
 		}
-		d.dispatch(FrameEvent{img})
+		d.dispatch(ui.FrameEvent{img})
 	}
 	conn.OnPLI = func() {
 		d.capture.RequestKeyframe()
 	}
 
-	d.dispatch(InfoEvent{"Searching for match..."})
+	d.dispatch(ui.InfoEvent{"Searching for match..."})
 	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
 	if err := match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
@@ -111,7 +112,7 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 
 	connectTimeout.Reset(10 * time.Second)
 
-	d.dispatch(InfoEvent{"Found match. Connecting..."})
+	d.dispatch(ui.InfoEvent{"Found match. Connecting..."})
 
 	select {
 	case <-ctx.Done():
@@ -130,8 +131,8 @@ func (d *demo) Stop() error {
 	return nil
 }
 
-func (d *demo) dispatch(e Event) {
-	newState := StateReducer(d.state, e)
+func (d *demo) dispatch(e ui.Event) {
+	newState := ui.StateReducer(d.state, e)
 	if !reflect.DeepEqual(d.state, newState) {
 		d.renderer.SetState(newState)
 	}
@@ -145,7 +146,7 @@ func newDemo() (*demo, error) {
 	}
 
 	d := &demo{
-		renderer: NewRenderer(),
+		renderer: ui.NewRenderer(),
 		capture:  cap,
 	}
 	d.renderer.Start()
@@ -177,7 +178,7 @@ func main() {
 		if err != nil {
 			return
 		}
-		demo.dispatch(ResizeEvent{winSize})
+		demo.dispatch(ui.ResizeEvent{winSize})
 	}
 	checkWinSize()
 	go func() {
@@ -196,9 +197,9 @@ func main() {
 
 		msg := demo.state.Input
 		if err := demo.conn.SendMessage(msg); err != nil {
-			demo.dispatch(ErrorEvent{"sending message failed"})
+			demo.dispatch(ui.ErrorEvent{"sending message failed"})
 		} else {
-			demo.dispatch(SentMessageEvent{msg})
+			demo.dispatch(ui.SentMessageEvent{msg})
 		}
 	}
 
@@ -214,7 +215,7 @@ func main() {
 				nextPartner = nil
 			}
 		case 127: // backspace
-			demo.dispatch(BackspaceEvent{})
+			demo.dispatch(ui.BackspaceEvent{})
 		case '\n', '\r':
 			sendMessage()
 		case ' ':
@@ -222,9 +223,9 @@ func main() {
 				skipIntro()
 				skipIntro = nil
 			}
-			demo.dispatch(KeypressEvent{c})
+			demo.dispatch(ui.KeypressEvent{c})
 		default:
-			demo.dispatch(KeypressEvent{c})
+			demo.dispatch(ui.KeypressEvent{c})
 		}
 	}); err != nil {
 		log.Fatal(err)
@@ -235,36 +236,36 @@ func main() {
 		introCtx, skipIntro = context.WithCancel(context.Background())
 
 		// Play Dialup intro
-		demo.dispatch(SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
+		demo.dispatch(ui.SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
 
 		player, err := NewPlayer(videos.Globe())
 		if err != nil {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(FrameEvent{img})
+			demo.dispatch(ui.FrameEvent{img})
 		}
 		player.Play(introCtx)
 
 		// Play Pion intro
-		demo.dispatch(SetTitleEvent{"Powered by Pion"})
+		demo.dispatch(ui.SetTitleEvent{"Powered by Pion"})
 
 		player, err = NewPlayer(videos.Pion())
 		if err != nil {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(FrameEvent{img})
+			demo.dispatch(ui.FrameEvent{img})
 		}
 		player.Play(introCtx)
 
 		// Attempt to find match
-		demo.dispatch(FrameEvent{nil})
-		demo.dispatch(SetTitleEvent{""})
+		demo.dispatch(ui.FrameEvent{nil})
+		demo.dispatch(ui.SetTitleEvent{""})
 
 		if err := demo.capture.Start(*camID, 5); err != nil {
 			msg := fmt.Sprintf("camera error: %v", err)
-			demo.dispatch(ErrorEvent{msg})
+			demo.dispatch(ui.ErrorEvent{msg})
 			// TODO: show in ui and retry
 			return
 		}
@@ -276,7 +277,7 @@ func main() {
 
 			skipReason, err := demo.Connect(connCtx, *signalerURL, *room)
 			if err != nil {
-				demo.dispatch(ErrorEvent{err.Error()})
+				demo.dispatch(ui.ErrorEvent{err.Error()})
 
 				sec := math.Pow(2, backoff) - 1
 				time.Sleep(time.Duration(sec) * time.Second)
@@ -285,8 +286,8 @@ func main() {
 				}
 				continue
 			}
-			demo.dispatch(InfoEvent{skipReason})
-			demo.dispatch(FrameEvent{nil})
+			demo.dispatch(ui.InfoEvent{skipReason})
+			demo.dispatch(ui.FrameEvent{nil})
 
 			time.Sleep(100 * time.Millisecond)
 		}
