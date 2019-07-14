@@ -7,154 +7,13 @@ import (
 	"image"
 	"log"
 	"math"
-	"reflect"
 	"time"
 
-	"github.com/dialupdotcom/ascii_roulette/signal"
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/ui"
 	"github.com/dialupdotcom/ascii_roulette/videos"
-	"github.com/dialupdotcom/ascii_roulette/vpx"
 	"github.com/pion/webrtc/v2"
 )
-
-type demo struct {
-	RTCConfig webrtc.Configuration
-
-	decoder *vpx.Decoder
-
-	renderer *ui.Renderer
-	state    ui.State
-
-	conn *Conn
-
-	capture *Capture
-}
-
-func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason string, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	frameTimeout := time.NewTimer(999 * time.Hour)
-	frameTimeout.Stop()
-
-	connectTimeout := time.NewTimer(999 * time.Hour)
-	connectTimeout.Stop()
-
-	ended := make(chan string)
-
-	conn, err := NewConn(d.RTCConfig)
-	if err != nil {
-		return "", err
-	}
-	d.conn = conn
-
-	defer func() {
-		// Turn off callbacks
-		conn.OnBye = func() {}
-		conn.OnMessage = func(string) {}
-		conn.OnICEConnectionStateChange = func(webrtc.ICEConnectionState) {}
-		conn.OnFrame = func([]byte) {}
-		conn.OnPLI = func() {}
-
-		// Send Goodbye packet
-		if conn.IsConnected() {
-			conn.SendBye()
-		}
-	}()
-
-	conn.OnBye = func() {
-		d.dispatch(ui.FrameEvent{nil})
-		ended <- "Partner left"
-	}
-	conn.OnMessage = func(s string) {
-		d.dispatch(ui.ReceivedChatEvent{s})
-	}
-	conn.OnICEConnectionStateChange = func(s webrtc.ICEConnectionState) {
-		switch s {
-		case webrtc.ICEConnectionStateConnected:
-			d.capture.RequestKeyframe()
-			connectTimeout.Stop()
-			d.dispatch(ui.InfoEvent{"Connected (type ctrl-d to skip)"})
-
-		case webrtc.ICEConnectionStateDisconnected:
-			d.dispatch(ui.InfoEvent{"Reconnecting..."})
-
-		case webrtc.ICEConnectionStateFailed:
-			ended <- "Lost connection"
-		}
-	}
-
-	d.capture.SetTrack(conn.SendTrack)
-
-	dec, err := vpx.NewDecoder(320, 240)
-	if err != nil {
-		return "", err
-	}
-	conn.OnFrame = func(frame []byte) {
-		frameTimeout.Reset(5 * time.Second)
-		connectTimeout.Stop()
-
-		img, err := dec.Decode(frame)
-		if err != nil {
-			conn.SendPLI()
-			return
-		}
-		d.dispatch(ui.FrameEvent{img})
-	}
-	conn.OnPLI = func() {
-		d.capture.RequestKeyframe()
-	}
-
-	d.dispatch(ui.InfoEvent{"Searching for match..."})
-	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
-	if err := signal.Match(ctx, wsURL, conn.pc); err != nil {
-		return "", err
-	}
-
-	connectTimeout.Reset(10 * time.Second)
-
-	d.dispatch(ui.InfoEvent{"Found match. Connecting..."})
-
-	select {
-	case <-ctx.Done():
-		return "", nil
-	case <-connectTimeout.C:
-		return "Connection timed out", nil
-	case <-frameTimeout.C:
-		return "Lost connection", nil
-	case reason := <-ended:
-		return reason, nil
-	}
-}
-
-func (d *demo) Stop() error {
-	d.renderer.Stop()
-	return nil
-}
-
-func (d *demo) dispatch(e ui.Event) {
-	newState := ui.StateReducer(d.state, e)
-	if !reflect.DeepEqual(d.state, newState) {
-		d.renderer.SetState(newState)
-	}
-	d.state = newState
-}
-
-func newDemo() (*demo, error) {
-	cap, err := NewCapture(320, 240)
-	if err != nil {
-		return nil, err
-	}
-
-	d := &demo{
-		renderer: ui.NewRenderer(),
-		capture:  cap,
-	}
-	d.renderer.Start()
-
-	return d, nil
-}
 
 func main() {
 	var (
@@ -164,12 +23,12 @@ func main() {
 	)
 	flag.Parse()
 
-	demo, err := newDemo()
+	app, err := New()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	demo.RTCConfig = webrtc.Configuration{
+	app.RTCConfig = webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{"stun:stun.l.google.com:19302"}},
 		},
@@ -180,7 +39,7 @@ func main() {
 		if err != nil {
 			return
 		}
-		demo.dispatch(ui.ResizeEvent{winSize})
+		app.dispatch(ui.ResizeEvent{winSize})
 	}
 	checkWinSize()
 	go func() {
@@ -193,15 +52,15 @@ func main() {
 	var nextPartner func()
 
 	sendMessage := func() {
-		if demo.conn == nil || !demo.conn.IsConnected() {
+		if app.conn == nil || !app.conn.IsConnected() {
 			return
 		}
 
-		msg := demo.state.Input
-		if err := demo.conn.SendMessage(msg); err != nil {
-			demo.dispatch(ui.ErrorEvent{"sending message failed"})
+		msg := app.state.Input
+		if err := app.conn.SendMessage(msg); err != nil {
+			app.dispatch(ui.ErrorEvent{"sending message failed"})
 		} else {
-			demo.dispatch(ui.SentMessageEvent{msg})
+			app.dispatch(ui.SentMessageEvent{msg})
 		}
 	}
 
@@ -217,7 +76,7 @@ func main() {
 				nextPartner = nil
 			}
 		case 127: // backspace
-			demo.dispatch(ui.BackspaceEvent{})
+		app.dispatch(ui.BackspaceEvent{})
 		case '\n', '\r':
 			sendMessage()
 		case ' ':
@@ -225,9 +84,9 @@ func main() {
 				skipIntro()
 				skipIntro = nil
 			}
-			demo.dispatch(ui.KeypressEvent{c})
+			app.dispatch(ui.KeypressEvent{c})
 		default:
-			demo.dispatch(ui.KeypressEvent{c})
+			app.dispatch(ui.KeypressEvent{c})
 		}
 	}); err != nil {
 		log.Fatal(err)
@@ -238,35 +97,35 @@ func main() {
 		introCtx, skipIntro = context.WithCancel(context.Background())
 
 		// Play Dialup intro
-		demo.dispatch(ui.SetPageEvent(ui.GlobePage))
+		app.dispatch(ui.SetPageEvent(ui.GlobePage))
 
 		player, err := videos.NewPlayer(videos.Globe())
 		if err != nil {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(ui.FrameEvent{img})
+			app.dispatch(ui.FrameEvent{img})
 		}
 		player.Play(introCtx)
 
 		// Play Pion intro
-		demo.dispatch(ui.SetPageEvent(ui.PionPage))
+		app.dispatch(ui.SetPageEvent(ui.PionPage))
 
 		player, err = videos.NewPlayer(videos.Pion())
 		if err != nil {
 			log.Fatal(err)
 		}
 		player.OnFrame = func(img image.Image) {
-			demo.dispatch(ui.FrameEvent{img})
+			app.dispatch(ui.FrameEvent{img})
 		}
 		player.Play(introCtx)
 
 		// Attempt to find match
-		demo.dispatch(ui.SetPageEvent(ui.ChatPage))
+		app.dispatch(ui.SetPageEvent(ui.ChatPage))
 
-		if err := demo.capture.Start(*camID, 5); err != nil {
+		if err := app.capture.Start(*camID, 5); err != nil {
 			msg := fmt.Sprintf("camera error: %v", err)
-			demo.dispatch(ui.ErrorEvent{msg})
+			app.dispatch(ui.ErrorEvent{msg})
 			// TODO: show in ui and retry
 			return
 		}
@@ -276,9 +135,9 @@ func main() {
 			var connCtx context.Context
 			connCtx, nextPartner = context.WithCancel(context.Background())
 
-			skipReason, err := demo.Connect(connCtx, *signalerURL, *room)
+			skipReason, err := app.Connect(connCtx, *signalerURL, *room)
 			if err != nil {
-				demo.dispatch(ui.ErrorEvent{err.Error()})
+				app.dispatch(ui.ErrorEvent{err.Error()})
 
 				sec := math.Pow(2, backoff) - 1
 				time.Sleep(time.Duration(sec) * time.Second)
@@ -287,16 +146,16 @@ func main() {
 				}
 				continue
 			}
-			demo.dispatch(ui.InfoEvent{skipReason})
-			demo.dispatch(ui.FrameEvent{nil})
+			app.dispatch(ui.InfoEvent{skipReason})
+			app.dispatch(ui.FrameEvent{nil})
 
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 
 	<-quitChan
-	if demo.conn != nil && demo.conn.IsConnected() {
-		demo.conn.SendBye()
+	if app.conn != nil && app.conn.IsConnected() {
+		app.conn.SendBye()
 	}
-	demo.Stop()
+	app.Stop()
 }
