@@ -9,14 +9,24 @@ import (
 )
 
 func Match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	signalConn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		return err
 	}
-	defer signalConn.Close()
+	go func() {
+		<-ctx.Done()
+		signalConn.Close()
+	}()
 
 	msg := &signalMsg{}
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		if err := signalConn.ReadJSON(msg); err != nil {
 			return err
 		}
