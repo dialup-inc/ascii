@@ -3,7 +3,7 @@ package camera
 /*
 #cgo LDFLAGS: -L. -lcam -lc++ -framework Foundation -framework AVFoundation -framework CoreVideo -framework CoreMedia
 
-#include "cam.h"
+#include "cam_avfoundation.h"
 
 extern void onFrame(void *userdata, void *buf, int len);
 void onFrame_cgo(void *userdata, void *buf, int len) {

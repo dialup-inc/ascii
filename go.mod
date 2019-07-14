@@ -3,6 +3,7 @@ module github.com/dialupdotcom/ascii_roulette
 go 1.12
 
 require (
+	github.com/blackjack/webcam v0.0.0-20190407142958-6cd3de4f4861
 	github.com/golang/mock v1.3.1 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/gorilla/websocket v1.4.0

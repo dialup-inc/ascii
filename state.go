@@ -43,7 +43,7 @@ func (e KeypressEvent) Do(s State) State {
 	s.Input = ansiRegex.ReplaceAllString(s.Input, "")
 
 	// Strip bell characters
-	s.Input = strings.Replace(s.Input, "\a", "")
+	s.Input = strings.Replace(s.Input, "\a", "", -1)
 
 	return s
 }

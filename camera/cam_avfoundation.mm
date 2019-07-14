@@ -1,4 +1,4 @@
-#import "cam.h"
+#import "cam_avfoundation.h"
 
 #import <AVFoundation/AVFoundation.h>
 
