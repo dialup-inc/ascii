@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 #  ASCII Roulette v1.0.0
 #
