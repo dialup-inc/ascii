@@ -15,17 +15,14 @@ import (
 	"github.com/dialupdotcom/ascii_roulette/ui"
 	"github.com/dialupdotcom/ascii_roulette/videos"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/pion/stun"
 	"github.com/pion/webrtc/v2"
 )
 
-var defaultRTCConfig = webrtc.Configuration{
-	ICEServers: []webrtc.ICEServer{
-		{URLs: []string{"stun:stun.l.google.com:19302"}},
-	},
-}
+const defaultSTUNServer = "stun.l.google.com:19302"
 
 type App struct {
-	RTCConfig webrtc.Configuration
+	STUNServer string
 
 	decoder *vpx.Decoder
 
@@ -183,6 +180,42 @@ func (a *App) sendMessage() {
 		a.renderer.Dispatch(ui.SentMessageEvent{msg})
 	}
 }
+
+func (a *App) checkConnection(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	c, err := stun.Dial("udp", a.STUNServer)
+	if err != nil {
+		return errors.New("connection error: check your firewall or network")
+	}
+	message := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
+
+	errChan := make(chan error)
+
+	go c.Do(message, func(res stun.Event) {
+		errChan <- res.Error
+	})
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			return errors.New("binding request failed: firewall may be blocking connections")
+		}
+		return nil
+
+	case <-ctx.Done():
+		switch ctx.Err() {
+		case context.Canceled:
+			return err
+		case context.DeadlineExceeded:
+			return errors.New("binding request failed: firewall may be blocking connections")
+		default:
+			return nil
+		}
+	}
+}
+
 func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason string, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -193,9 +226,17 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 	connectTimeout := time.NewTimer(999 * time.Hour)
 	connectTimeout.Stop()
 
+	if err := a.checkConnection(ctx); err != nil {
+		return "", err
+	}
+
 	ended := make(chan string)
 
-	conn, err := NewConn(a.RTCConfig)
+	conn, err := NewConn(webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{
+			{URLs: []string{fmt.Sprintf("stun:%s", a.STUNServer)}},
+		},
+	})
 	if err != nil {
 		return "", err
 	}
@@ -329,7 +370,7 @@ func New(signalerURL, room string) (*App, error) {
 	a := &App{
 		signalerURL: signalerURL,
 		room:        room,
-		RTCConfig:   defaultRTCConfig,
+		STUNServer:  defaultSTUNServer,
 
 		renderer: ui.NewRenderer(),
 		capture:  cap,

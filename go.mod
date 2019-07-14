@@ -16,6 +16,7 @@ require (
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/pion/rtcp v1.2.1
 	github.com/pion/rtp v1.1.2
+	github.com/pion/stun v0.3.1
 	github.com/pion/webrtc/v2 v2.0.22
 	github.com/shuLhan/go-bindata v3.4.0+incompatible // indirect
 	golang.org/x/crypto v0.0.0-20190621222207-cc06ce4a13d4 // indirect
