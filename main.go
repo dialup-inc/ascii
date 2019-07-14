@@ -239,7 +239,7 @@ func main() {
 		// Play Dialup intro
 		demo.dispatch(ui.SetPageEvent(ui.GlobePage))
 
-		player, err := NewPlayer(videos.Globe())
+		player, err := videos.NewPlayer(videos.Globe())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -251,7 +251,7 @@ func main() {
 		// Play Pion intro
 		demo.dispatch(ui.SetPageEvent(ui.PionPage))
 
-		player, err = NewPlayer(videos.Pion())
+		player, err = videos.NewPlayer(videos.Pion())
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -1,4 +1,4 @@
-package main
+package videos
 
 import (
 	"encoding/binary"
