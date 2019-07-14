@@ -1,4 +1,4 @@
-package main
+package signal
 
 import (
 	"context"
@@ -8,12 +8,7 @@ import (
 	"github.com/pion/webrtc/v2"
 )
 
-type signalMsg struct {
-	Type    string                    `json:"type"`
-	Payload webrtc.SessionDescription `json:"payload"`
-}
-
-func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
+func Match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
 	signalConn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package main
+package signal
 
 import (
 	"log"
@@ -6,15 +6,60 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/pion/webrtc/v2"
 )
 
 type signalMsg struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
+	Type    string                    `json:"type"`
+	Payload webrtc.SessionDescription `json:"payload"`
 }
 
-var roomsMu sync.Mutex
-var rooms = map[string]chan signalMsg{}
+func NewServer() *Server {
+	return &Server{
+		rooms: make(map[string]chan signalMsg),
+	}
+}
+
+type Server struct {
+	roomsMu sync.Mutex
+	rooms   map[string]chan signalMsg
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var upgrader websocket.Upgrader
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("[error]", err)
+		return
+	}
+	defer conn.Close()
+
+	roomName := r.URL.Query().Get("room")
+	if roomName == "" {
+		log.Println("No room name provided", err)
+		return
+	}
+
+	s.roomsMu.Lock()
+	comChan, shouldAnswer := s.rooms[roomName]
+	if !shouldAnswer {
+		comChan = make(chan signalMsg)
+		s.rooms[roomName] = comChan
+
+		defer func() {
+			s.roomsMu.Lock()
+			delete(s.rooms, roomName)
+			s.roomsMu.Unlock()
+		}()
+	}
+	s.roomsMu.Unlock()
+
+	if shouldAnswer {
+		generateAnswer(comChan, conn)
+	} else {
+		generateOffer(comChan, conn)
+	}
+}
 
 func generateOffer(comChan chan signalMsg, conn *websocket.Conn) {
 	if err := conn.WriteJSON(signalMsg{
@@ -57,44 +102,4 @@ func generateAnswer(comChan chan signalMsg, conn *websocket.Conn) {
 		return
 	}
 	comChan <- *answerMsg
-}
-
-func main() {
-	var upgrader websocket.Upgrader
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println("[error]", err)
-			return
-		}
-		defer conn.Close()
-
-		roomName := r.URL.Query().Get("room")
-		if roomName == "" {
-			log.Println("No room name provided", err)
-			return
-		}
-
-		roomsMu.Lock()
-		comChan, shouldAnswer := rooms[roomName]
-		if !shouldAnswer {
-			comChan = make(chan signalMsg)
-			rooms[roomName] = comChan
-
-			defer func() {
-				roomsMu.Lock()
-				delete(rooms, roomName)
-				roomsMu.Unlock()
-			}()
-		}
-		roomsMu.Unlock()
-
-		if shouldAnswer {
-			generateAnswer(comChan, conn)
-		} else {
-			generateOffer(comChan, conn)
-		}
-	})
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
 }
