@@ -236,7 +236,7 @@ func main() {
 		introCtx, skipIntro = context.WithCancel(context.Background())
 
 		// Play Dialup intro
-		demo.dispatch(ui.SetTitleEvent{"Presented by dialup.com\n(we're hiring!)"})
+		demo.dispatch(ui.SetPageEvent(ui.GlobePage))
 
 		player, err := NewPlayer(videos.Globe())
 		if err != nil {
@@ -248,7 +248,7 @@ func main() {
 		player.Play(introCtx)
 
 		// Play Pion intro
-		demo.dispatch(ui.SetTitleEvent{"Powered by Pion"})
+		demo.dispatch(ui.SetPageEvent(ui.PionPage))
 
 		player, err = NewPlayer(videos.Pion())
 		if err != nil {
@@ -260,8 +260,7 @@ func main() {
 		player.Play(introCtx)
 
 		// Attempt to find match
-		demo.dispatch(ui.FrameEvent{nil})
-		demo.dispatch(ui.SetTitleEvent{""})
+		demo.dispatch(ui.SetPageEvent(ui.ChatPage))
 
 		if err := demo.capture.Start(*camID, 5); err != nil {
 			msg := fmt.Sprintf("camera error: %v", err)

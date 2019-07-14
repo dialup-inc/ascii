@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image"
 	"regexp"
 	"strings"
 )
@@ -8,19 +9,17 @@ import (
 func StateReducer(s State, event Event) State {
 	s.Input = inputReducer(s.Input, event)
 	s.Messages = messagesReducer(s.Messages, event)
+	s.Image = imageReducer(s.Image, event)
 
 	switch e := event.(type) {
-	case FrameEvent:
-		s.Image = e.Image
-
 	case ResizeEvent:
 		s.WindowWidth = e.WinSize.Width
 		s.WindowHeight = e.WinSize.Height
 		s.WindowCols = e.WinSize.Cols
 		s.WindowRows = e.WinSize.Rows
 
-	case SetTitleEvent:
-		s.Title = e.Title
+	case SetPageEvent:
+		s.Page = Page(e)
 	}
 
 	return s
@@ -47,6 +46,19 @@ func inputReducer(s string, event Event) string {
 
 	case SentMessageEvent:
 		return ""
+
+	default:
+		return s
+	}
+}
+
+func imageReducer(s image.Image, event Event) image.Image {
+	switch e := event.(type) {
+	case FrameEvent:
+		return e.Image
+
+	case SetPageEvent:
+		return nil
 
 	default:
 		return s

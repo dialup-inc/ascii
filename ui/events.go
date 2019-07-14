@@ -38,6 +38,4 @@ type InfoEvent struct {
 	Text string
 }
 
-type SetTitleEvent struct {
-	Title string
-}
+type SetPageEvent Page

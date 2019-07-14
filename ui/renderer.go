@@ -191,7 +191,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.BlinkOff()
 }
 
-func (r *Renderer) drawTitle(buf *bytes.Buffer) {
+func (r *Renderer) drawTitle(buf *bytes.Buffer, line1, line2 string) {
 	a := term.ANSI{buf}
 
 	r.stateMu.Lock()
@@ -201,26 +201,16 @@ func (r *Renderer) drawTitle(buf *bytes.Buffer) {
 	// Draw background
 	a.Bold()
 
-	lines := strings.Split(s.Title, "\n")
-	var title1 string
-	if len(lines) > 0 {
-		title1 = lines[0]
-	}
-	var title2 string
-	if len(lines) > 1 {
-		title2 = lines[1]
-	}
-
 	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
 	buf.WriteString(strings.Repeat(" ", s.WindowCols*chatHeight))
 
 	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
-	a.CursorPosition(s.WindowRows-2, (s.WindowCols-len(title1))/2+1)
-	buf.WriteString(title1)
+	a.CursorPosition(s.WindowRows-2, (s.WindowCols-len(line1))/2+1)
+	buf.WriteString(line1)
 
 	a.Foreground(color.RGBA{0x00, 0x55, 0x55, 0xff})
-	a.CursorPosition(s.WindowRows-1, (s.WindowCols-len(title2))/2+1)
-	buf.WriteString(title2)
+	a.CursorPosition(s.WindowRows-1, (s.WindowCols-len(line2))/2+1)
+	buf.WriteString(line2)
 }
 
 func (r *Renderer) draw() {
@@ -230,12 +220,19 @@ func (r *Renderer) draw() {
 	s := r.state
 	r.stateMu.Unlock()
 
-	if s.Title == "" {
+	switch s.Page {
+	case GlobePage:
+		r.drawTitle(buf, "Presented by dialup.com", "(we're hiring!)")
+		r.drawVideo(buf)
+
+	case PionPage:
+		r.drawTitle(buf, "Powered by Pion", "")
+		r.drawVideo(buf)
+
+	case ChatPage:
 		r.drawChat(buf)
-	} else {
-		r.drawTitle(buf)
+		r.drawVideo(buf)
 	}
-	r.drawVideo(buf)
 
 	io.Copy(os.Stdout, buf)
 }

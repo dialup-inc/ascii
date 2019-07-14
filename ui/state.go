@@ -4,14 +4,20 @@ import (
 	"image"
 )
 
+type Page string
+
+var (
+	GlobePage Page = "globe"
+	PionPage  Page = "pion"
+	ChatPage  Page = "chat"
+)
+
 type State struct {
-	Page string
+	Page Page
 
 	Input    string
 	Messages []Message
 	Image    image.Image
-
-	Title string
 
 	WindowWidth  int
 	WindowHeight int
