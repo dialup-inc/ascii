@@ -11,38 +11,44 @@ extern void onFrame(void *userdata, void *buf, int len);
 import "C"
 
 var mu sync.Mutex
-var index int
-var fns = make(map[int]func([]byte))
+var nextID handleID
+var handles = make(map[handleID]func([]byte))
+
+type handleID int
 
 //export onFrame
 func onFrame(userdata unsafe.Pointer, buf unsafe.Pointer, size C.int) {
-	frame := C.GoBytes(buf, size)
+	nv21 := C.GoBytes(buf, size)
 
-	cbNum := (*C.int)(userdata)
+	handleNum := (*C.int)(userdata)
 
-	cb := lookup(int(*cbNum))
-	cb(frame)
+	cb := lookup(handleID(*handleNum))
+	cb(nv21)
 }
 
-func register(fn func([]byte)) int {
+func register(fn func([]byte)) handleID {
 	mu.Lock()
 	defer mu.Unlock()
-	index++
-	for fns[index] != nil {
-		index++
+
+	nextID++
+	for handles[nextID] != nil {
+		nextID++
 	}
-	fns[index] = fn
-	return index
+	handles[nextID] = fn
+
+	return nextID
 }
 
-func lookup(i int) func([]byte) {
+func lookup(i handleID) func([]byte) {
 	mu.Lock()
 	defer mu.Unlock()
-	return fns[i]
+
+	return handles[i]
 }
 
-func unregister(i int) {
+func unregister(i handleID) {
 	mu.Lock()
 	defer mu.Unlock()
-	delete(fns, i)
+
+	delete(handles, i)
 }
