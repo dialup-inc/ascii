@@ -213,6 +213,19 @@ func (r *Renderer) drawTitle(buf *bytes.Buffer, line1, line2 string) {
 	buf.WriteString(line2)
 }
 
+func (r *Renderer) drawBlank(buf *bytes.Buffer) {
+	a := term.ANSI{buf}
+
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
+
+	a.CursorPosition(1, 1)
+	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*s.WinSize.Rows))
+}
+
 func (r *Renderer) draw() {
 	buf := bytes.NewBuffer(nil)
 
@@ -232,6 +245,9 @@ func (r *Renderer) draw() {
 	case ChatPage:
 		r.drawChat(buf)
 		r.drawVideo(buf)
+
+	default:
+		r.drawBlank(buf)
 	}
 
 	io.Copy(os.Stdout, buf)
