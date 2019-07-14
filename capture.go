@@ -1,11 +1,13 @@
 package main
 
 import (
+	"image"
 	"sync"
 	"sync/atomic"
 
 	"github.com/dialupdotcom/ascii_roulette/camera"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/dialupdotcom/ascii_roulette/yuv"
 	"github.com/pion/webrtc/v2"
 	"github.com/pion/webrtc/v2/pkg/media"
 )
@@ -67,7 +69,7 @@ func (c *Capture) SetTrack(track *webrtc.Track) {
 	c.track = track
 }
 
-func (c *Capture) onFrame(frame []byte) {
+func (c *Capture) onFrame(img image.Image) {
 	if !atomic.CompareAndSwapUint32(&c.encodeLock, 0, 1) {
 		return
 	}
@@ -75,7 +77,9 @@ func (c *Capture) onFrame(frame []byte) {
 
 	forceKeyframe := atomic.CompareAndSwapUint32(&c.forceKeyframe, 1, 0)
 
-	n, err := c.enc.Encode(c.vpxBuf, frame, c.pts, forceKeyframe)
+	i420, _, _ := yuv.ToI420(img)
+
+	n, err := c.enc.Encode(c.vpxBuf, i420, c.pts, forceKeyframe)
 	if err != nil {
 		// fmt.Println("encode: ", err)
 		return

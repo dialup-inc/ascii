@@ -13,16 +13,26 @@ void onFrame_cgo(void *userdata, void *buf, int len) {
 import "C"
 import (
 	"fmt"
+	"image"
 	"unsafe"
+
+	"github.com/dialupdotcom/ascii_roulette/yuv"
 )
 
 type Camera struct {
 	c C.Camera
 
+	width int
+	height int
+
 	handleID handleID
+	callback func(image.Image)
 }
 
 func (c *Camera) Start(camID, width, height int) error {
+	c.width = width
+	c.height = height
+
 	if ret := C.cam_start(c.c, C.int(camID), C.int(width), C.int(height)); ret != 0 {
 		return fmt.Errorf("error %d", ret)
 	}
@@ -34,10 +44,21 @@ func (c *Camera) Close() error {
 	return nil
 }
 
-func New(cb func([]byte)) (*Camera, error) {
+func (c *Camera) onFrame(nv21 []byte) {
+	img, err := yuv.FromI420(nv21, c.width, c.height)
+	if err != nil {
+		panic(err)
+	}
+	c.callback(img)
+}
+
+func New(cb func(image.Image)) (*Camera, error) {
 	cam := &Camera{}
 
-	cam.handleID = register(cb)
+	cam.callback = cb
+	cam.handleID = register(func(nv21 []byte) {
+		cam.onFrame(nv21)
+	})
 
 	if ret := C.cam_init(&cam.c, (C.FrameCallback)(unsafe.Pointer(C.onFrame_cgo)), unsafe.Pointer(&cam.handleID)); ret != 0 {
 		return nil, fmt.Errorf("error %d", ret)
