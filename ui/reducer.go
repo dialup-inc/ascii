@@ -6,8 +6,8 @@ import (
 )
 
 func StateReducer(s State, event Event) State {
-	s.Input = InputReducer(s.Input, event)
-	s.Messages = MessagesReducer(s.Messages, event)
+	s.Input = inputReducer(s.Input, event)
+	s.Messages = messagesReducer(s.Messages, event)
 
 	switch e := event.(type) {
 	case FrameEvent:
@@ -28,8 +28,7 @@ func StateReducer(s State, event Event) State {
 
 var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
-// InputReducer manages the state of the text input
-func InputReducer(s string, event Event) string {
+func inputReducer(s string, event Event) string {
 	switch e := event.(type) {
 	case KeypressEvent:
 		s += string(e.Char)
@@ -54,8 +53,7 @@ func InputReducer(s string, event Event) string {
 	}
 }
 
-// MessagesReducer manages the state of the message list
-func MessagesReducer(s []Message, event Event) []Message {
+func messagesReducer(s []Message, event Event) []Message {
 	switch e := event.(type) {
 	case SentMessageEvent:
 		return append(s, Message{
