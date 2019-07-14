@@ -2,6 +2,8 @@ package ui
 
 import (
 	"image"
+
+	"github.com/dialupdotcom/ascii_roulette/term"
 )
 
 type Page string
@@ -18,11 +20,7 @@ type State struct {
 	Input    string
 	Messages []Message
 	Image    image.Image
-
-	WindowWidth  int
-	WindowHeight int
-	WindowCols   int
-	WindowRows   int
+	WinSize  term.WinSize
 }
 
 type Message struct {

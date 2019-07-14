@@ -55,11 +55,11 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 	s := r.state
 	r.stateMu.Unlock()
 
-	vidW, vidH := s.WindowCols, s.WindowRows-chatHeight
+	vidW, vidH := s.WinSize.Cols, s.WinSize.Rows-chatHeight
 
 	// pixels are rectangular, not square in the terminal. add a scale factor to account for this
-	windowWidth, windowHeight := s.WindowWidth, s.WindowHeight
-	windowRows, windowCols := s.WindowRows, s.WindowCols
+	windowWidth, windowHeight := s.WinSize.Width, s.WinSize.Height
+	windowRows, windowCols := s.WinSize.Rows, s.WinSize.Cols
 
 	winAspect := 2.0
 	if windowWidth > 0 && windowHeight > 0 && windowRows > 0 && windowCols > 0 {
@@ -124,7 +124,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	s := r.state
 	r.stateMu.Unlock()
 
-	width := s.WindowCols
+	width := s.WinSize.Cols
 
 	// Draw background
 	a.Normal()
@@ -202,14 +202,14 @@ func (r *Renderer) drawTitle(buf *bytes.Buffer, line1, line2 string) {
 	a.Bold()
 
 	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
-	buf.WriteString(strings.Repeat(" ", s.WindowCols*chatHeight))
+	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*chatHeight))
 
 	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
-	a.CursorPosition(s.WindowRows-2, (s.WindowCols-len(line1))/2+1)
+	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line1))/2+1)
 	buf.WriteString(line1)
 
 	a.Foreground(color.RGBA{0x00, 0x55, 0x55, 0xff})
-	a.CursorPosition(s.WindowRows-1, (s.WindowCols-len(line2))/2+1)
+	a.CursorPosition(s.WinSize.Rows-1, (s.WinSize.Cols-len(line2))/2+1)
 	buf.WriteString(line2)
 }
 
@@ -270,7 +270,7 @@ func (r *Renderer) Stop() {
 	a.ForegroundReset()
 	a.Normal()
 	a.CursorPosition(1, 1)
-	buf.WriteString(strings.Repeat(" ", s.WindowCols*s.WindowRows))
+	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*s.WinSize.Rows))
 	a.CursorPosition(1, 1)
 
 	io.Copy(os.Stdout, buf)

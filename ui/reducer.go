@@ -4,25 +4,36 @@ import (
 	"image"
 	"regexp"
 	"strings"
+
+	"github.com/dialupdotcom/ascii_roulette/term"
 )
 
 func StateReducer(s State, event Event) State {
+	s.Image = imageReducer(s.Image, event)
 	s.Input = inputReducer(s.Input, event)
 	s.Messages = messagesReducer(s.Messages, event)
-	s.Image = imageReducer(s.Image, event)
-
-	switch e := event.(type) {
-	case ResizeEvent:
-		s.WindowWidth = e.WinSize.Width
-		s.WindowHeight = e.WinSize.Height
-		s.WindowCols = e.WinSize.Cols
-		s.WindowRows = e.WinSize.Rows
-
-	case SetPageEvent:
-		s.Page = Page(e)
-	}
+	s.Page = pageReducer(s.Page, event)
+	s.WinSize = winSizeReducer(s.WinSize, event)
 
 	return s
+}
+
+func pageReducer(s Page, event Event) Page {
+	switch e := event.(type) {
+	case SetPageEvent:
+		return Page(e)
+	default:
+		return s
+	}
+}
+
+func winSizeReducer(s term.WinSize, event Event) term.WinSize {
+	switch e := event.(type) {
+	case ResizeEvent:
+		return e.WinSize
+	default:
+		return s
+	}
 }
 
 var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
