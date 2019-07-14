@@ -18,12 +18,12 @@ type handleID int
 
 //export onFrame
 func onFrame(userdata unsafe.Pointer, buf unsafe.Pointer, size C.int) {
-	nv21 := C.GoBytes(buf, size)
+	data := C.GoBytes(buf, size)
 
 	handleNum := (*C.int)(userdata)
 
 	cb := lookup(handleID(*handleNum))
-	cb(nv21)
+	cb(data)
 }
 
 func register(fn func([]byte)) handleID {

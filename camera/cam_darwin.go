@@ -44,8 +44,8 @@ func (c *Camera) Close() error {
 	return nil
 }
 
-func (c *Camera) onFrame(nv21 []byte) {
-	img, err := yuv.FromI420(nv21, c.width, c.height)
+func (c *Camera) onFrame(data []byte) {
+	img, err := yuv.FromI420(data, c.width, c.height)
 	if err != nil {
 		panic(err)
 	}
@@ -56,8 +56,8 @@ func New(cb func(image.Image)) (*Camera, error) {
 	cam := &Camera{}
 
 	cam.callback = cb
-	cam.handleID = register(func(nv21 []byte) {
-		cam.onFrame(nv21)
+	cam.handleID = register(func(data []byte) {
+		cam.onFrame(data)
 	})
 
 	if ret := C.cam_init(&cam.c, (C.FrameCallback)(unsafe.Pointer(C.onFrame_cgo)), unsafe.Pointer(&cam.handleID)); ret != 0 {
