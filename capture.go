@@ -7,7 +7,6 @@ import (
 
 	"github.com/dialupdotcom/ascii_roulette/camera"
 	"github.com/dialupdotcom/ascii_roulette/vpx"
-	"github.com/dialupdotcom/ascii_roulette/yuv"
 	"github.com/pion/webrtc/v2"
 	"github.com/pion/webrtc/v2/pkg/media"
 )
@@ -77,9 +76,7 @@ func (c *Capture) onFrame(img image.Image) {
 
 	forceKeyframe := atomic.CompareAndSwapUint32(&c.forceKeyframe, 1, 0)
 
-	i420, _, _ := yuv.ToI420(img)
-
-	n, err := c.enc.Encode(c.vpxBuf, i420, c.pts, forceKeyframe)
+	n, err := c.enc.Encode(c.vpxBuf, img, c.pts, forceKeyframe)
 	if err != nil {
 		// fmt.Println("encode: ", err)
 		return

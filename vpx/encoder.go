@@ -12,8 +12,11 @@ int vpx_cleanup_enc(vpx_codec_ctx_t *ctx, vpx_image_t *raw);
 import "C"
 
 import (
+	"image"
 	"sync"
 	"unsafe"
+
+	"github.com/dialupdotcom/ascii_roulette/yuv"
 )
 
 type Encoder struct {
@@ -43,10 +46,15 @@ func (e *Encoder) Close() error {
 	return nil
 }
 
-func (e *Encoder) Encode(vpxFrame, yuvFrame []byte, pts int, forceKeyframe bool) (n int, err error) {
+func (e *Encoder) Encode(vpxFrame []byte, img image.Image, pts int, forceKeyframe bool) (n int, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	i420, _, _ := yuv.ToI420(img)
+	return e.encode(vpxFrame, i420, pts, forceKeyframe)
+}
+
+func (e *Encoder) encode(vpxFrame, yuvFrame []byte, pts int, forceKeyframe bool) (n int, err error) {
 	inP := (*C.char)(unsafe.Pointer(&yuvFrame[0]))
 	inL := C.int(len(yuvFrame))
 
