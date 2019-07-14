@@ -4,6 +4,7 @@ import (
 	"image"
 
 	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/dialupdotcom/ascii_roulette/yuv"
 )
 
 type Decoder struct {
@@ -43,17 +44,5 @@ func (d *Decoder) Decode(data []byte) (image.Image, error) {
 
 	frame := d.buf[:n]
 
-	yi := d.width * d.height
-	cbi := yi + d.width*d.height/4
-	cri := cbi + d.width*d.height/4
-
-	return &image.YCbCr{
-		Y:              frame[:yi],
-		YStride:        d.width,
-		Cb:             frame[yi:cbi],
-		Cr:             frame[cbi:cri],
-		CStride:        d.width / 2,
-		SubsampleRatio: image.YCbCrSubsampleRatio420,
-		Rect:           image.Rect(0, 0, d.width, d.height),
-	}, nil
+	return yuv.FromI420(frame, d.width, d.height)
 }
