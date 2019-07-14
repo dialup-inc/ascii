@@ -13,13 +13,14 @@ import (
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/ui"
 	"github.com/dialupdotcom/ascii_roulette/videos"
+	"github.com/dialupdotcom/ascii_roulette/vpx"
 	"github.com/pion/webrtc/v2"
 )
 
 type demo struct {
 	RTCConfig webrtc.Configuration
 
-	decoder Decoder
+	decoder *vpx.Decoder
 
 	renderer *ui.Renderer
 	state    ui.State
@@ -85,7 +86,7 @@ func (d *demo) Connect(ctx context.Context, signalerURL, room string) (endReason
 
 	d.capture.SetTrack(conn.SendTrack)
 
-	dec, err := NewDecoder(320, 240)
+	dec, err := vpx.NewDecoder(320, 240)
 	if err != nil {
 		return "", err
 	}

@@ -7,11 +7,13 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/dialupdotcom/ascii_roulette/vpx"
 )
 
 type Player struct {
 	reader  *IVFReader
-	decoder *Decoder
+	decoder *vpx.Decoder
 
 	OnFrame func(image.Image)
 
@@ -80,7 +82,7 @@ func NewPlayer(r io.ReadSeeker) (*Player, error) {
 		return nil, fmt.Errorf("unknown codec %q", c)
 	}
 
-	decoder, err := NewDecoder(int(ivf.Header.Width), int(ivf.Header.Height))
+	decoder, err := vpx.NewDecoder(int(ivf.Header.Width), int(ivf.Header.Height))
 	if err != nil {
 		return nil, err
 	}
