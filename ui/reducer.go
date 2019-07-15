@@ -3,7 +3,7 @@ package ui
 import (
 	"image"
 	"regexp"
-	"strings"
+	"unicode"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
 )
@@ -43,11 +43,20 @@ func inputReducer(s string, event Event) string {
 	case KeypressEvent:
 		s += string(e)
 
-		// Strip ansi codes
+		// Strip ANSI escape codes
 		s = ansiRegex.ReplaceAllString(s, "")
 
-		// Strip bell characters
-		return strings.Replace(s, "\a", "", -1)
+		// Strip unprintable characters
+		var printable []rune
+		for _, r := range s {
+			if !unicode.IsPrint(r) {
+				continue
+			}
+			printable = append(printable, r)
+		}
+		s = string(printable)
+
+		return s
 
 	case BackspaceEvent:
 		if len(s) == 0 {
