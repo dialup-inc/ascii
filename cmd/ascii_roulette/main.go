@@ -5,7 +5,7 @@ import (
 	"flag"
 	"log"
 
-	roulette "github.com/dialupdotcom/ascii_roulette"
+	"github.com/dialup-inc/ascii"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 
 	ctx := context.Background()
 
-	app, err := roulette.New(*signalerURL)
+	app, err := ascii.New(*signalerURL)
 	if err != nil {
 		log.Fatal(err)
 	}

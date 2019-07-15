@@ -1,4 +1,4 @@
-package roulette
+package ascii
 
 import (
 	"encoding/json"

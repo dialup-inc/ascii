@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/blackjack/webcam v0.0.0-20190407142958-6cd3de4f4861
-	github.com/dialup-inc/ascii/signal v0.0.0-20190715033226-44d12c247afe
+	github.com/dialup-inc/ascii/signal v0.0.0-20190715163141-e9715ef66a09 // indirect
 	github.com/golang/mock v1.3.1 // indirect
 	github.com/golang/protobuf v1.3.1 // indirect
 	github.com/gorilla/websocket v1.4.0
