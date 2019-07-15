@@ -164,9 +164,16 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	// Then write line
 	a.CursorPosition(chatBottom, 0)
 	inputLine := " > " + input
+	if len(inputLine) >= width {
+		inputLine = inputLine[:width-1] + "…"
+	}
 	buf.WriteString(inputLine)
-	a.Blink()
-	buf.WriteString("_")
+
+	// Add blinking cursor where you're supposed to type
+	if len(inputLine) < width {
+		a.Blink()
+		buf.WriteString("_")
+	}
 
 	a.BlinkOff()
 }
