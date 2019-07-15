@@ -44,7 +44,7 @@ We are looking for help developing a [Windows port](https://github.com/dialup-in
 
 ## Copyright
 
-Code and documentation copyright 2019 [Dialup, Inc.](https://dialup.com)
+Code and documentation Copyright 2019 [Dialup, Inc.](https://dialup.com)
 
 Code released under the [MIT license](LICENSE).
 
