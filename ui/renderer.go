@@ -92,6 +92,9 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	r.stateMu.Unlock()
 
 	width := s.WinSize.Cols
+	chatTop := s.WinSize.Rows - chatHeight + 1
+	logTop := chatTop + 1
+	chatBottom := logTop + 3
 
 	// Draw background
 	a.Normal()
@@ -135,11 +138,13 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	if len(s.Messages) > 3 {
 		msgs = msgs[len(s.Messages)-3:]
 	}
-	for _, m := range msgs {
+	for i, m := range msgs {
+		a.CursorPosition(logTop+i, 0)
 		drawChatLine(m)
 	}
 	// blank if there arent enough messages
 	for i := len(msgs); i < 3; i++ {
+		a.CursorPosition(logTop+i, 0)
 		buf.WriteString(strings.Repeat(" ", width))
 	}
 
@@ -148,13 +153,21 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
 	a.Foreground(color.White)
 	a.Bold()
-	buf.WriteString(" > " + input)
-	a.Blink()
-	buf.WriteString("_")
+
+	// First clear
+	a.CursorPosition(chatBottom, 0)
 	textLen = utf8.RuneCountInString(input) + 4
 	if width > textLen {
-		buf.WriteString(strings.Repeat(" ", width-textLen))
+		buf.WriteString(strings.Repeat(" ", width))
 	}
+
+	// Then write line
+	a.CursorPosition(chatBottom, 0)
+	inputLine := " > " + input
+	buf.WriteString(inputLine)
+	a.Blink()
+	buf.WriteString("_")
+
 	a.BlinkOff()
 }
 
