@@ -6,6 +6,7 @@
 [![Build Status](https://travis-ci.org/dialup-inc/ascii.svg?branch=master)](https://travis-ci.org/dialup-inc/ascii)
 [![Go Report Card](https://goreportcard.com/badge/github.com/dialup-inc/ascii?)](https://goreportcard.com/report/github.com/dialup-inc/ascii)
 [![GoDoc](https://godoc.org/github.com/dialup-inc/ascii?status.svg)](https://godoc.org/github.com/dialup-inc/ascii)
+[![Pion](https://img.shields.io/badge/Pion-v2.0.22-red.svg)](https://github.com/pion/webrtc)
 
 <p align="center">
   <img height="279" width="350" src=".github/demo.gif" />
