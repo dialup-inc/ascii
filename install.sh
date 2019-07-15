@@ -61,19 +61,48 @@ function detect_platform() {
     esac
 }
 
+function getMD5() {
+    file="$1"
+    if ! [ -f "$file" ]; then
+        return
+    fi
+    
+    if [ -x "$(command -v md5sum)" ]; then
+        md5sum | cut -d ' ' -f 1
+        elif [ -x "$(command -v md5)" ]; then
+        md5 -r $file | cut -d ' ' -f 1
+    fi
+}
+
+function checkEtag() {
+    url="$1"
+    etag="$2"
+    
+    code="$(curl -s --head -o /dev/null -w "%{http_code}" -H "If-None-Match: $etag" "$url")"
+    
+    if [ "$code" != "304" ]; then
+        echo "changed"
+    fi
+}
+
 function main() {
-    PLATFORM="$(detect_platform)"
-    BINARY_URL="https://storage.googleapis.com/asciiroulette/ascii_roulette.$PLATFORM"
+    platform="$(detect_platform)"
+    binaryURL="https://storage.googleapis.com/asciiroulette/ascii_roulette.$platform"
+    md5="$(getMD5 /tmp/ascii_roulette)"
     
-    echo "Downloading ASCII Roulette..."
-    curl -fs "$BINARY_URL" > /tmp/ascii_roulette
+    if [ -n "$(checkEtag $binaryURL $md5)" ]; then
+        echo -e "Downloading ASCII Roulette\e[5m...\e[0m"
+        curl -fs "$binaryURL" > /tmp/ascii_roulette
+    fi
+    
     chmod +x /tmp/ascii_roulette
-    clear
     
+    clear
     /tmp/ascii_roulette
     
-    rm /tmp/ascii_roulette
-    reset
+    if [ $? -eq 0 ]; then
+        reset
+    fi
 }
 
 main
