@@ -7,6 +7,10 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/dialup-inc/ascii?)](https://goreportcard.com/report/github.com/dialup-inc/ascii)
 [![GoDoc](https://godoc.org/github.com/dialup-inc/ascii?status.svg)](https://godoc.org/github.com/dialup-inc/ascii)
 
+<p align="center">
+  <img height="279" width="350" src=".github/demo.gif" />
+</p>
+
 ## Installation
 
 **Download the fast way:**
