@@ -1,4 +1,4 @@
-package signal
+package roulette
 
 import (
 	"context"

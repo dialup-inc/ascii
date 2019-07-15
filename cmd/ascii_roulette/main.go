@@ -10,7 +10,7 @@ import (
 
 func main() {
 	var (
-		signalerURL = flag.String("signaler-url", "asciirtc-signaler.pion.ly:8080", "host and port of the signaler")
+		signalerURL = flag.String("signaler-url", "roulette.dialup.com", "host and port of the signaler")
 		room        = flag.String("room", "main", "Name of room to join ")
 	)
 	flag.Parse()

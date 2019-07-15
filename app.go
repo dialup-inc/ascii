@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dialupdotcom/ascii_roulette/signal"
 	"github.com/dialupdotcom/ascii_roulette/term"
 	"github.com/dialupdotcom/ascii_roulette/ui"
 	"github.com/dialupdotcom/ascii_roulette/videos"
@@ -334,7 +333,7 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 		Level: ui.LogLevelInfo,
 		Text:  "Searching for match...",
 	})
-	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
+	wsURL := fmt.Sprintf("wss://%s/ws?room=%s", signalerURL, room)
 	if err := Match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
 	}
