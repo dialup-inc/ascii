@@ -70,38 +70,41 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) connComplete(c *conn) {
-	c.Close(websocket.CloseNormalClosure, "")
-
 	log.Info().
 		Uint64("id", uint64(c.ID)).
 		Str("state", "complete").
 		Msg("conn closed")
+
+	c.Close(websocket.CloseNormalClosure, "")
 }
 
 func (s *Server) connErr(c *conn, err error) {
-	c.Close(websocket.CloseInternalServerErr, err.Error())
-
 	log.Info().
 		Uint64("id", uint64(c.ID)).
 		Err(err).
 		Str("state", "failed").
 		Msg("conn closed")
+
+	c.Close(websocket.CloseInternalServerErr, err.Error())
 }
 
-func (s *Server) match(a, b *conn) {
+func (s *Server) handshake(a, b *conn) error {
 	offer, err := a.RequestOffer()
 	if err != nil {
-		s.connErr(a, err)
-		s.connErr(b, err)
-		return
+		return err
 	}
 	answer, err := b.SendOffer(offer)
 	if err != nil {
-		s.connErr(a, err)
-		s.connErr(b, err)
-		return
+		return err
 	}
 	if err := a.SendAnswer(answer); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) match(a, b *conn) {
+	if err := s.handshake(a, b); err != nil {
 		s.connErr(a, err)
 		s.connErr(b, err)
 		return
