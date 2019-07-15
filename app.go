@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,10 +123,14 @@ func (a *App) run(ctx context.Context) error {
 		a.cancelMu.Unlock()
 
 		skipReason, err := a.connect(connCtx, a.signalerURL, a.room)
-		if err == context.Canceled {
-			break
-		}
-		if err != nil {
+		// HACK(maxhawkins): these errors get returned when the context passed
+		// into match is canceled, so we ignore them. There's probably a more elegant
+		// way to close the websocket without all this error munging.
+		if err != nil && strings.Contains(err.Error(), "use of closed network connection") {
+			continue
+		} else if err != nil && strings.Contains(err.Error(), "operation was canceled") {
+			continue
+		} else if err != nil {
 			a.renderer.Dispatch(ui.LogEvent{
 				Level: ui.LogLevelError,
 				Text:  err.Error(),
@@ -138,6 +143,7 @@ func (a *App) run(ctx context.Context) error {
 			}
 			continue
 		}
+
 		a.renderer.Dispatch(ui.LogEvent{
 			Level: ui.LogLevelInfo,
 			Text:  skipReason,
