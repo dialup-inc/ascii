@@ -19,7 +19,7 @@
 
 ```sh
 # Paste this command into your terminal to install
-bash <(curl https://dialup.com/ascii)
+bash <(curl -Ls dialup.com/ascii)
 ```
 
 **Or, build from from source:**
