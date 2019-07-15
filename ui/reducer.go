@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"unicode"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialup-inc/ascii/term"
 )
 
 func StateReducer(s State, event Event) State {

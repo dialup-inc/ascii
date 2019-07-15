@@ -16,7 +16,7 @@ import (
 	"image"
 	"unsafe"
 
-	"github.com/dialupdotcom/ascii_roulette/yuv"
+	"github.com/dialup-inc/ascii/yuv"
 )
 
 type Camera struct {

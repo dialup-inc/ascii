@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
-	"github.com/dialupdotcom/ascii_roulette/ui"
+	"github.com/dialup-inc/ascii/term"
+	"github.com/dialup-inc/ascii/ui"
 
 	"image/color"
 	_ "image/jpeg"

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/dialup-inc/ascii/vpx"
 )
 
 type Player struct {

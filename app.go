@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
-	"github.com/dialupdotcom/ascii_roulette/ui"
-	"github.com/dialupdotcom/ascii_roulette/videos"
-	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/dialup-inc/ascii/term"
+	"github.com/dialup-inc/ascii/ui"
+	"github.com/dialup-inc/ascii/videos"
+	"github.com/dialup-inc/ascii/vpx"
 	"github.com/pion/stun"
 	"github.com/pion/webrtc/v2"
 )
@@ -370,7 +370,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		Level: ui.LogLevelInfo,
 		Text:  "Searching for match...",
 	})
-	
+
 	err = Match(ctx, a.signalerURL, conn.pc)
 	if err == errMatchFailed {
 		return "", nil

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dialupdotcom/ascii_roulette/camera"
-	"github.com/dialupdotcom/ascii_roulette/vpx"
+	"github.com/dialup-inc/ascii/camera"
+	"github.com/dialup-inc/ascii/vpx"
 	"github.com/pion/webrtc/v2"
 	"github.com/pion/webrtc/v2/pkg/media"
 )

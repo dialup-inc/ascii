@@ -15,7 +15,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/dialupdotcom/ascii_roulette/yuv"
+	"github.com/dialup-inc/ascii/yuv"
 )
 
 type Decoder struct {

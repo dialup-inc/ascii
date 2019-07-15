@@ -3,7 +3,7 @@ package ui
 import (
 	"image"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialup-inc/ascii/term"
 )
 
 type Page string

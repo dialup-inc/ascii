@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialup-inc/ascii/term"
 	"github.com/nfnt/resize"
 )
 

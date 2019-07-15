@@ -4,20 +4,22 @@
 
 [![License](https://img.shields.io/github/license/dialup-inc/ascii.svg)](LICENSE)
 [![Build Status](https://travis-ci.org/dialup-inc/ascii.svg?branch=master)](https://travis-ci.org/dialup-inc/ascii)
-[![Go Report Card](https://goreportcard.com/badge/github.com/dialupdotcom/ascii_roulette?)](https://goreportcard.com/report/github.com/dialup-inc/ascii)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dialup-inc/ascii?)](https://goreportcard.com/report/github.com/dialup-inc/ascii)
 [![GoDoc](https://godoc.org/github.com/dialup-inc/ascii?status.svg)](https://godoc.org/github.com/dialup-inc/ascii)
 
 ## Installation
 
-*The fast way*
+_The fast way_
+
 ```sh
 # Paste this command into your terminal to install
 bash <(curl https://dialup.com/ascii)
 ```
 
-*Building from source*
+_Building from source_
+
 ```sh
-git clone https://github.com/dialupdotcom/ascii_roulette.git
+git clone https://github.com/dialup-inc/ascii.git
 cd ascii_roulette
 make
 ```
@@ -35,6 +37,7 @@ We are looking for help developing a [Windows port](https://github.com/dialup-in
 [![djbaskin](avatar/contributors/djbaskin.png)](https://github.com/djbaskin)
 
 ## Copyright
+
 Code and documentation copyright 2019 [Dialup, Inc.](https://dialup.com)
 
 Code released under the [MIT license](https://raw.githubusercontent.com/dialup-inc/ascii/master/LICENSE).

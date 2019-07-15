@@ -42,9 +42,9 @@ func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(map[string]string{
 		"app":         "ascii_roulette",
 		"service":     "signaler",
-		"info":        "https://dialup.com/ascii",
-		"source":      "https://github.com/dialupdotcom/ascii_roulette",
 		"description": "This is the WebRTC signaling server for ASCII Roulette.",
+		"info":        "https://dialup.com/ascii",
+		"source":      "https://github.com/dialup-inc/ascii",
 		"contact":     "webmaster@dialup.com",
 	})
 }

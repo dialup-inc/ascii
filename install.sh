@@ -18,7 +18,7 @@
 # Pion WebRTC library.
 #
 # [[ This project is completely open source! ]]
-# Github: https://github.com/dialupdotcom/ascii_roulette
+# Github: https://github.com/dialup-inc/ascii
 # Website: https://dialup.com/ascii
 # Email: webmaster@dialup.com
 
@@ -26,7 +26,7 @@ function fail_unsupported() {
     platform="${1:-"your platform"}"
     echo "ASCII Roulette isn't supported on $platform yet :-( Try Mac or Linux instead."
     echo ""
-    echo "Contributions are welcome! https://github.com/dialupdotcom/ascii_roulette"
+    echo "Contributions are welcome! https://github.com/dialup-inc/ascii"
     exit 1
 }
 

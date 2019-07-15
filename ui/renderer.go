@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dialupdotcom/ascii_roulette/term"
+	"github.com/dialup-inc/ascii/term"
 )
 
 const chatHeight = 5

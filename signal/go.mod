@@ -1,4 +1,4 @@
-module github.com/dialupdotcom/ascii_roulette/signal
+module github.com/dialup-inc/ascii/signal
 
 go 1.12
 
