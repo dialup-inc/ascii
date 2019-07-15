@@ -166,11 +166,16 @@ func (a *App) run(ctx context.Context) error {
 			})
 
 			sec := math.Pow(2, backoff) - 1
-			time.Sleep(time.Duration(sec) * time.Second)
 			if backoff < 4 {
 				backoff++
 			}
-			continue
+
+			select {
+			case <-time.After(time.Duration(sec) * time.Second):
+				continue
+			case <-ctx.Done():
+				return nil
+			}
 		}
 
 		a.renderer.Dispatch(ui.LogEvent{
