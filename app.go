@@ -33,6 +33,7 @@ type App struct {
 	quit        context.CancelFunc
 	skipIntro   context.CancelFunc
 	nextPartner context.CancelFunc
+	startChat   context.CancelFunc
 
 	renderer *ui.Renderer
 
@@ -93,6 +94,17 @@ func (a *App) run(ctx context.Context) error {
 		a.renderer.Dispatch(ui.FrameEvent(img))
 	}
 	player.Play(introCtx)
+
+	// Show confirmation page
+	a.renderer.Dispatch(ui.SetPageEvent(ui.ConfirmPage))
+
+	startCtx, startChat := context.WithCancel(ctx)
+
+	a.cancelMu.Lock()
+	a.startChat = startChat
+	a.cancelMu.Unlock()
+
+	<-startCtx.Done()
 
 	// Attempt to find match
 	a.renderer.Dispatch(ui.SetPageEvent(ui.ChatPage))
@@ -382,6 +394,13 @@ func (a *App) onKeypress(c rune) {
 		a.renderer.Dispatch(ui.BackspaceEvent{})
 
 	case '\n', '\r':
+		a.cancelMu.Lock()
+		if a.startChat != nil {
+			a.startChat()
+			a.startChat = nil
+		}
+		a.cancelMu.Unlock()
+
 		a.sendMessage()
 
 	case ' ':
@@ -389,6 +408,10 @@ func (a *App) onKeypress(c rune) {
 		if a.skipIntro != nil {
 			a.skipIntro()
 			a.skipIntro = nil
+		}
+		if a.startChat != nil {
+			a.startChat()
+			a.startChat = nil
 		}
 		a.cancelMu.Unlock()
 

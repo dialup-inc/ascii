@@ -23,10 +23,10 @@ type DCMessage struct {
 
 func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn := &Conn{
-		OnPLI:     func() {},
-		OnFrame:   func([]byte) {},
-		OnMessage: func(string) {},
-		OnBye:     func() {},
+		OnPLI:                      func() {},
+		OnFrame:                    func([]byte) {},
+		OnMessage:                  func(string) {},
+		OnBye:                      func() {},
 		OnICEConnectionStateChange: func(webrtc.ICEConnectionState) {},
 	}
 

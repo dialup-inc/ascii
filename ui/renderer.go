@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image/color"
 	"io"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -27,6 +28,8 @@ type Renderer struct {
 
 	stateMu sync.Mutex
 	state   State
+
+	start time.Time
 }
 
 func (r *Renderer) GetState() State {
@@ -213,6 +216,121 @@ func (r *Renderer) drawBlank(buf *bytes.Buffer) {
 	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*s.WinSize.Rows))
 }
 
+func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
+	a := term.ANSI{buf}
+
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	// Blank background
+	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
+	a.CursorPosition(1, 1)
+	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*s.WinSize.Rows))
+
+	// Draw title
+	if s.WinSize.Rows > 6 {
+		line := "ASCII Roulette"
+		if s.WinSize.Cols > 25 {
+			line = "Welcome to " + line
+		}
+
+		timeOffset := float64(time.Since(r.start)/time.Millisecond) / 2000.0
+
+		a.Bold()
+		a.CursorPosition(2, (s.WinSize.Cols-len(line))/2+1)
+		for i, r := range line {
+			t := float64(i)/float64(len(line)) + timeOffset
+			a.Foreground(rainbow(t))
+			buf.WriteRune(r)
+		}
+	}
+
+	// Draw description
+	descWidth := 40
+	maxWidth := s.WinSize.Cols - 2
+	if maxWidth < descWidth {
+		descWidth = maxWidth
+	}
+
+	desc := "This program connects you in a video chat with a random person!\nYour webcam will be activated. For more information visit dialup.com/ascii"
+	var descSections [][]string
+	var totalLength int
+	for i, line := range strings.Split(desc, "\n") {
+		lines := wordWrap(line, descWidth)
+		descSections = append(descSections, lines)
+
+		totalLength += len(lines)
+		if i > 0 {
+			totalLength++ // for newline
+		}
+	}
+
+	a.Normal()
+	a.Foreground(color.RGBA{0xAA, 0xAA, 0xAA, 0xFF})
+
+	descOffset := 5
+	for _, lines := range descSections {
+		// Don't display if it'll clip the button
+		if len(lines)+descOffset > s.WinSize.Rows-4 {
+			break
+		}
+
+		for i, line := range lines {
+			a.CursorPosition((s.WinSize.Rows-totalLength-8)/2+i+descOffset, (s.WinSize.Cols-len(line))/2+1)
+			buf.WriteString(line)
+		}
+
+		descOffset += len(lines) + 1
+	}
+
+	// Draw button
+	a.Bold()
+	a.Background(color.RGBA{0x11, 0x11, 0x11, 0xFF})
+	a.Foreground(color.White)
+
+	line := "  Press Enter to Start  "
+	if s.WinSize.Cols <= 25 {
+		line = "  Press Enter  "
+	}
+
+	a.CursorPosition(s.WinSize.Rows-3, (s.WinSize.Cols-len(line))/2+1)
+	buf.WriteString(strings.Repeat(" ", len(line)))
+
+	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line))/2+1)
+	buf.WriteString(line)
+
+	a.CursorPosition(s.WinSize.Rows-1, (s.WinSize.Cols-len(line))/2+1)
+	buf.WriteString(strings.Repeat(" ", len(line)))
+}
+
+func wordWrap(s string, lineLen int) []string {
+	var lines []string
+
+	var line string
+	for _, word := range strings.Split(s, " ") {
+		if len(line)+len(word)+1 > lineLen {
+			lines = append(lines, line)
+			line = ""
+		}
+		line += " " + word
+	}
+	if len(line) > 0 {
+		lines = append(lines, line)
+	}
+
+	return lines
+}
+
+func rainbow(t float64) *color.RGBA {
+	const freq = math.Pi
+	r := math.Sin(freq*t)*127 + 128
+	g := math.Sin(freq*t+2*math.Pi/3)*127 + 128
+	b := math.Sin(freq*t+4*math.Pi/3)*127 + 128
+
+	return &color.RGBA{uint8(r), uint8(g), uint8(b), 0xFF}
+}
+
 func (r *Renderer) draw() {
 	buf := bytes.NewBuffer(nil)
 
@@ -233,6 +351,9 @@ func (r *Renderer) draw() {
 		r.drawChat(buf)
 		r.drawVideo(buf)
 
+	case ConfirmPage:
+		r.drawConfirm(buf)
+
 	default:
 		r.drawBlank(buf)
 	}
@@ -241,6 +362,8 @@ func (r *Renderer) draw() {
 }
 
 func (r *Renderer) loop() {
+	r.start = time.Now()
+
 	ticker := time.NewTicker(200 * time.Millisecond)
 	for {
 		r.draw()

@@ -9,9 +9,10 @@ import (
 type Page string
 
 var (
-	GlobePage Page = "globe"
-	PionPage  Page = "pion"
-	ChatPage  Page = "chat"
+	GlobePage   Page = "globe"
+	PionPage    Page = "pion"
+	ConfirmPage Page = "confirm"
+	ChatPage    Page = "chat"
 )
 
 type State struct {
