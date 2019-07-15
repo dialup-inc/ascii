@@ -262,7 +262,7 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	// Hide parts of the description if they're too long
 	var totalLength int
 	for i, lines := range descSections {
-		if totalLength + len(lines) > s.WinSize.Rows - 8 {
+		if totalLength+len(lines) > s.WinSize.Rows-8 {
 			descSections = descSections[:i]
 			break
 		}

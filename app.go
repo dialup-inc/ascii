@@ -106,19 +106,38 @@ func (a *App) run(ctx context.Context) error {
 
 	<-startCtx.Done()
 
-	// Attempt to find match
+	// give user a chance to quit
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
+
 	a.renderer.Dispatch(ui.SetPageEvent(ui.ChatPage))
 
-	if err := a.capture.Start(0, 5); err != nil {
+	// Start up camera
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+
+		err := a.capture.Start(0, 5)
+		if err == nil {
+			break
+		}
 		msg := fmt.Sprintf("camera error: %v", err)
 		a.renderer.Dispatch(ui.LogEvent{
 			Level: ui.LogLevelError,
 			Text:  msg,
 		})
-		// TODO: show in ui and retry
-		return err
+
+		select {
+		case <-time.After(1500 * time.Millisecond):
+			continue
+		case <-ctx.Done():
+			return nil
+		}
 	}
 
+	// Attempt to find match
 	var backoff float64
 	for {
 		if err := ctx.Err(); err != nil {
