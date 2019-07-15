@@ -7,6 +7,7 @@ import (
 	"image"
 	"log"
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -53,6 +54,12 @@ func (a *App) run(ctx context.Context) error {
 
 	if err := term.CaptureStdin(a.onKeypress); err != nil {
 		return err
+	}
+
+	winSize, _ := term.GetWinSize()
+	if winSize.Rows < 15 || winSize.Cols < 50 {
+		ansi := term.ANSI{os.Stdout}
+		ansi.ResizeWindow(15, 50)
 	}
 
 	go a.watchWinSize(ctx)
