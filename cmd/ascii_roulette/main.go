@@ -10,14 +10,13 @@ import (
 
 func main() {
 	var (
-		signalerURL = flag.String("signaler-url", "roulette.dialup.com", "host and port of the signaler")
-		room        = flag.String("room", "main", "Name of room to join ")
+		signalerURL = flag.String("signaler-url", "wss://roulette.dialup.com/ws", "host and port of the signaler")
 	)
 	flag.Parse()
 
 	ctx := context.Background()
 
-	app, err := roulette.New(*signalerURL, *room)
+	app, err := roulette.New(*signalerURL)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -28,7 +28,6 @@ type App struct {
 	decoder *vpx.Decoder
 
 	signalerURL string
-	room        string
 
 	cancelMu    sync.Mutex
 	quit        context.CancelFunc
@@ -121,7 +120,7 @@ func (a *App) run(ctx context.Context) error {
 		a.nextPartner = nextPartner
 		a.cancelMu.Unlock()
 
-		skipReason, err := a.connect(connCtx, a.signalerURL, a.room)
+		skipReason, err := a.connect(connCtx)
 		// HACK(maxhawkins): these errors get returned when the context passed
 		// into match is canceled, so we ignore them. There's probably a more elegant
 		// way to close the websocket without all this error munging.
@@ -240,7 +239,7 @@ func (a *App) checkConnection(ctx context.Context) error {
 	}
 }
 
-func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason string, err error) {
+func (a *App) connect(ctx context.Context) (endReason string, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -333,8 +332,7 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 		Level: ui.LogLevelInfo,
 		Text:  "Searching for match...",
 	})
-	wsURL := fmt.Sprintf("wss://%s/ws?room=%s", signalerURL, room)
-	if err := Match(ctx, wsURL, conn.pc); err != nil {
+	if err := Match(ctx, a.signalerURL, conn.pc); err != nil {
 		return "", err
 	}
 
@@ -401,7 +399,7 @@ func (a *App) onKeypress(c rune) {
 	}
 }
 
-func New(signalerURL, room string) (*App, error) {
+func New(signalerURL string) (*App, error) {
 	cap, err := NewCapture(320, 240)
 	if err != nil {
 		return nil, err
@@ -409,7 +407,6 @@ func New(signalerURL, room string) (*App, error) {
 
 	a := &App{
 		signalerURL: signalerURL,
-		room:        room,
 		STUNServer:  defaultSTUNServer,
 
 		renderer: ui.NewRenderer(),

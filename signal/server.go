@@ -2,28 +2,29 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"math/rand"
 	"net/http"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
 
-type signalMsg struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
-}
-
 func NewServer() *Server {
-	return &Server{
-		rooms: make(map[string]chan signalMsg),
+	s := &Server{
+		lobby: make(map[connID]*conn),
 	}
+	go s.doMatching()
+	return s
 }
 
 type Server struct {
-	roomsMu sync.Mutex
-	rooms   map[string]chan signalMsg
+	lobbyMu sync.Mutex
+	lobby   map[connID]*conn
+
+	nextID connID
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -41,93 +42,114 @@ func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	enc.Encode(map[string]string{
-		"app":     "ascii_roulette",
-		"service": "signaler",
-		"info":     "https://dialup.com/ascii",
-		"source":     "https://github.com/dialupdotcom/ascii_roulette",
+		"app":         "ascii_roulette",
+		"service":     "signaler",
+		"info":        "https://dialup.com/ascii",
+		"source":      "https://github.com/dialupdotcom/ascii_roulette",
 		"description": "This is the WebRTC signaling server for ASCII Roulette.",
-		"contact": "webmaster@dialup.com",
+		"contact":     "webmaster@dialup.com",
 	})
 }
 
 func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	var upgrader websocket.Upgrader
-	conn, err := upgrader.Upgrade(w, r, nil)
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error().Err(err).Msg("websocket.Upgrader error")
-		return
-	}
-	defer conn.Close()
-
-	roomName := r.URL.Query().Get("room")
-	if roomName == "" {
-		log.Warn().Msg("no room name provided")
-		http.Error(w, "no room name provided", http.StatusBadRequest)
+		log.Error().Err(err).Msg("websocket error")
 		return
 	}
 
-	s.roomsMu.Lock()
-	comChan, shouldAnswer := s.rooms[roomName]
-	if !shouldAnswer {
-		comChan = make(chan signalMsg)
-		s.rooms[roomName] = comChan
+	nextID := atomic.AddUint64((*uint64)(&s.nextID), 1)
+	id := connID(nextID)
 
-		defer func() {
-			s.roomsMu.Lock()
-			delete(s.rooms, roomName)
-			s.roomsMu.Unlock()
-		}()
+	c := &conn{
+		ID: id,
+		ws: ws,
 	}
-	s.roomsMu.Unlock()
 
-	if shouldAnswer {
-		generateAnswer(comChan, conn)
-	} else {
-		generateOffer(comChan, conn)
-	}
+	s.lobbyMu.Lock()
+	s.lobby[id] = c
+	s.lobbyMu.Unlock()
+
+	log.Info().Uint64("id", nextID).Msg("new conn")
 }
 
-func generateOffer(comChan chan signalMsg, conn *websocket.Conn) {
-	if err := conn.WriteJSON(signalMsg{
-		Type: "requestOffer",
-	}); err != nil {
-		log.Warn().Err(err).Msg("requestOffer write failed")
-		return
-	}
+func (s *Server) connComplete(c *conn) {
+	c.Close(websocket.CloseNormalClosure, "")
 
-	offerMsg := &signalMsg{}
-	if err := conn.ReadJSON(offerMsg); err != nil {
-		log.Warn().Err(err).Msg("requestOffer read failed")
-		return
-	} else if offerMsg.Type != "offer" {
-		msg := fmt.Sprint("expected offer from 'requestOffer' got:", offerMsg.Type)
-		log.Warn().Msg(msg)
-		return
-	}
-	comChan <- *offerMsg
+	s.lobbyMu.Lock()
+	delete(s.lobby, c.ID)
+	s.lobbyMu.Unlock()
 
-	answerMsg := <-comChan
-	if err := conn.WriteJSON(answerMsg); err != nil {
-		log.Warn().Err(err).Msg("requestOffer reply failed")
-		return
-	}
+	log.Info().
+		Uint64("id", uint64(c.ID)).
+		Str("state", "complete").
+		Msg("conn closed")
 }
 
-func generateAnswer(comChan chan signalMsg, conn *websocket.Conn) {
-	offer := <-comChan
-	if err := conn.WriteJSON(offer); err != nil {
-		log.Warn().Err(err).Msg("offer write failed")
+func (s *Server) connErr(c *conn, err error) {
+	c.Close(websocket.CloseInternalServerErr, err.Error())
+
+	s.lobbyMu.Lock()
+	delete(s.lobby, c.ID)
+	s.lobbyMu.Unlock()
+
+	log.Info().
+		Uint64("id", uint64(c.ID)).
+		Err(err).
+		Str("state", "failed").
+		Msg("conn closed")
+}
+
+func (s *Server) match(a, b *conn) {
+	offer, err := a.RequestOffer()
+	if err != nil {
+		s.connErr(a, err)
+		return
+	}
+	answer, err := b.SendOffer(offer)
+	if err != nil {
+		s.connErr(a, err)
+		s.connErr(b, err)
+		return
+	}
+	if err := a.SendAnswer(answer); err != nil {
+		s.connErr(a, err)
+		s.connErr(b, err)
 		return
 	}
 
-	answerMsg := &signalMsg{}
-	if err := conn.ReadJSON(answerMsg); err != nil {
-		log.Warn().Err(err).Msg("answer read failed")
-		return
-	} else if answerMsg.Type != "answer" {
-		msg := fmt.Sprint("expected answer from 'offer' got:", answerMsg.Type)
-		log.Warn().Msg(msg)
-		return
+	log.Info().
+		Uint64("a", uint64(a.ID)).
+		Uint64("b", uint64(b.ID)).
+		Msg("matched conns")
+
+	s.connComplete(a)
+	s.connComplete(b)
+}
+
+// runs in own goroutine
+func (s *Server) doMatching() {
+	ticker := time.NewTicker(5 * time.Second)
+	for range ticker.C {
+		s.lobbyMu.Lock()
+		var lobby []*conn
+		for _, c := range s.lobby {
+			lobby = append(lobby, c)
+		}
+		s.lobbyMu.Unlock()
+
+		var partner *conn
+		for _, i := range rand.Perm(len(lobby)) {
+			c := lobby[i]
+
+			if partner == nil {
+				partner = c
+				continue
+			}
+
+			go s.match(c, partner)
+			partner = nil
+		}
 	}
-	comChan <- *answerMsg
 }
