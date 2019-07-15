@@ -2,9 +2,7 @@ package ui
 
 import (
 	"bytes"
-	"image"
 	"image/color"
-	"image/draw"
 	"io"
 	"os"
 	"reflect"
@@ -14,10 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dialupdotcom/ascii_roulette/term"
-	"github.com/nfnt/resize"
 )
-
-var chars = []byte(" .,:;i1tfLCG08@")
 
 const chatHeight = 5
 
@@ -63,6 +58,14 @@ func (r *Renderer) RequestFrame() {
 	}
 }
 
+// pixels are rectangular, not square in the terminal. add a scale factor to account for this
+func getAspect(w term.WinSize) float64 {
+	if w.Width == 0 || w.Height == 0 || w.Rows == 0 || w.Cols == 0 {
+		return 2.0
+	}
+	return float64(w.Height) * float64(w.Cols) / float64(w.Rows) / float64(w.Width)
+}
+
 func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 	a := term.ANSI{buf}
 
@@ -72,64 +75,13 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer) {
 
 	vidW, vidH := s.WinSize.Cols, s.WinSize.Rows-chatHeight
 
-	// pixels are rectangular, not square in the terminal. add a scale factor to account for this
-	windowWidth, windowHeight := s.WinSize.Width, s.WinSize.Height
-	windowRows, windowCols := s.WinSize.Rows, s.WinSize.Cols
-
-	winAspect := 2.0
-	if windowWidth > 0 && windowHeight > 0 && windowRows > 0 && windowCols > 0 {
-		winAspect = float64(windowHeight) * float64(windowCols) / float64(windowRows) / float64(windowWidth)
-	}
-
-	winRect := image.Rect(0, 0, vidW, vidH)
-	colors := term.ANSIPalette
-	canvas := image.NewPaletted(winRect, colors)
-
-	if s.Image != nil {
-		imgRect := s.Image.Bounds()
-		imgW, imgH := float64(imgRect.Dx())*winAspect, float64(imgRect.Dy())
-
-		fitW, fitH := float64(vidW)/imgW, float64(vidH)/imgH
-		var scaleW, scaleH uint
-		if fitW < fitH {
-			scaleW = uint(imgW * fitW)
-			scaleH = uint(imgH * fitW)
-		} else {
-			scaleW = uint(imgW * fitH)
-			scaleH = uint(imgH * fitH)
-		}
-
-		scaled := resize.Resize(scaleW, scaleH, s.Image, resize.Bilinear)
-
-		offsetW, offsetH := (vidW-int(scaleW))/2, (vidH-int(scaleH))/2
-		rect := image.Rect(
-			offsetW,
-			offsetH,
-			offsetW+int(scaleW),
-			offsetH+int(scaleH),
-		)
-		draw.Draw(canvas, rect, scaled, image.ZP, draw.Over)
-	}
-
 	a.CursorPosition(1, 1)
 	a.Background(color.Black)
 	a.Bold()
 
-	currentColor := -1
-	for _, p := range canvas.Pix {
-		pxColor := colors[p]
-
-		if int(p) != currentColor {
-			a.Foreground(pxColor)
-
-			currentColor = int(p)
-		}
-
-		k, _, _, _ := color.GrayModel.Convert(pxColor).RGBA()
-		chr := int(k) * (len(chars) - 1) / 0xffff
-
-		buf.WriteByte(chars[chr])
-	}
+	aspect := getAspect(s.WinSize)
+	imgANSI := Image2ANSI(s.Image, vidW, vidH, aspect, false)
+	buf.Write(imgANSI)
 }
 
 func (r *Renderer) drawChat(buf *bytes.Buffer) {

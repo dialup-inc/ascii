@@ -54,6 +54,17 @@ func (a *ANSI) Background(c color.Color) (int, error) {
 	return a.Display.Write(cmd)
 }
 
+func (a *ANSI) ResizeWindow(rows, cols int) (int, error) {
+	var cmd []byte
+	cmd = append(cmd, '\033', '[', '8', ';')
+	cmd = strconv.AppendInt(cmd, int64(rows), 10)
+	cmd = append(cmd, ';')
+	cmd = strconv.AppendInt(cmd, int64(cols), 10)
+	cmd = append(cmd, 't')
+
+	return a.Display.Write(cmd)
+}
+
 func (a *ANSI) BackgroundReset() (int, error) {
 	return a.Display.Write([]byte{'\033', '[', '4', '9', 'm'})
 }
