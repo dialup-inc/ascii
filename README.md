@@ -9,18 +9,18 @@
 
 ## Installation
 
-**The fast way**
+**Download the fast way:**
 
 ```sh
 # Paste this command into your terminal to install
 bash <(curl https://dialup.com/ascii)
 ```
 
-**Building from source**
+**Or, build from from source:**
 
 ```sh
 git clone https://github.com/dialup-inc/ascii.git
-cd ascii_roulette
+cd ascii
 make
 ```
 
