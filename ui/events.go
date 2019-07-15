@@ -8,34 +8,20 @@ import (
 
 type Event interface{}
 
-type KeypressEvent struct {
-	Char rune
-}
+type KeypressEvent rune
 
-type SentMessageEvent struct {
-	Text string
-}
+type SentMessageEvent string
 
-type FrameEvent struct {
-	Image image.Image
-}
+type FrameEvent image.Image
 
-type ReceivedChatEvent struct {
-	Text string
-}
+type ReceivedChatEvent string
 
 type BackspaceEvent struct{}
 
-type ResizeEvent struct {
-	WinSize term.WinSize
-}
+type ResizeEvent term.WinSize
 
-type ErrorEvent struct {
-	Text string
-}
+type ErrorEvent string
 
-type InfoEvent struct {
-	Text string
-}
+type InfoEvent string
 
 type SetPageEvent Page

@@ -30,7 +30,7 @@ func pageReducer(s Page, event Event) Page {
 func winSizeReducer(s term.WinSize, event Event) term.WinSize {
 	switch e := event.(type) {
 	case ResizeEvent:
-		return e.WinSize
+		return term.WinSize(e)
 	default:
 		return s
 	}
@@ -41,7 +41,7 @@ var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\
 func inputReducer(s string, event Event) string {
 	switch e := event.(type) {
 	case KeypressEvent:
-		s += string(e.Char)
+		s += string(e)
 
 		// Strip ansi codes
 		s = ansiRegex.ReplaceAllString(s, "")
@@ -66,7 +66,7 @@ func inputReducer(s string, event Event) string {
 func imageReducer(s image.Image, event Event) image.Image {
 	switch e := event.(type) {
 	case FrameEvent:
-		return e.Image
+		return image.Image(e)
 
 	case SetPageEvent:
 		return nil
@@ -81,25 +81,25 @@ func messagesReducer(s []Message, event Event) []Message {
 	case SentMessageEvent:
 		return append(s, Message{
 			User: "You",
-			Text: e.Text,
+			Text: string(e),
 		})
 
 	case ReceivedChatEvent:
 		return append(s, Message{
 			User: "Them",
-			Text: e.Text,
+			Text: string(e),
 		})
 
 	case ErrorEvent:
 		return append(s, Message{
 			User: "Info",
-			Text: e.Text,
+			Text: string(e),
 		})
 
 	case InfoEvent:
 		return append(s, Message{
 			User: "Info",
-			Text: e.Text,
+			Text: string(e),
 		})
 
 	default:
