@@ -9,14 +9,14 @@
 
 ## Installation
 
-_The fast way_
+**The fast way**
 
 ```sh
 # Paste this command into your terminal to install
 bash <(curl https://dialup.com/ascii)
 ```
 
-_Building from source_
+**Building from source**
 
 ```sh
 git clone https://github.com/dialup-inc/ascii.git
