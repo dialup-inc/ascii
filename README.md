@@ -10,6 +10,7 @@
 <p align="center">
   <img height="279" width="350" src=".github/demo.gif" />
 </p>
+<p align="center">Chat with a random person without ever leaving your terminal window.</p>
 
 ## Installation
 
