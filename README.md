@@ -14,7 +14,7 @@ The fast way:
 bash <(curl https://dialup.com/ascii)
 ```
 
-From source:
+Build the source yourself:
 ```sh
 git clone https://github.com/dialupdotcom/ascii_roulette.git
 cd ascii_roulette
