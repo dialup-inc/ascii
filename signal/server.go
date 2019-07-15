@@ -1,17 +1,18 @@
-package signal
+package main
 
 import (
-	"log"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/pion/webrtc/v2"
+	"github.com/rs/zerolog/log"
 )
 
 type signalMsg struct {
-	Type    string                    `json:"type"`
-	Payload webrtc.SessionDescription `json:"payload"`
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
 }
 
 func NewServer() *Server {
@@ -26,17 +27,42 @@ type Server struct {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/":
+		s.HandleStatus(w, r)
+	case "/ws":
+		s.HandleWS(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.Encode(map[string]string{
+		"app":     "ascii_roulette",
+		"service": "signaler",
+		"info":     "https://dialup.com/ascii",
+		"source":     "https://github.com/dialupdotcom/ascii_roulette",
+		"description": "This is the WebRTC signaling server for ASCII Roulette.",
+		"contact": "webmaster@dialup.com",
+	})
+}
+
+func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 	var upgrader websocket.Upgrader
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("[error]", err)
+		log.Error().Err(err).Msg("websocket.Upgrader error")
 		return
 	}
 	defer conn.Close()
 
 	roomName := r.URL.Query().Get("room")
 	if roomName == "" {
-		log.Println("No room name provided", err)
+		log.Warn().Msg("no room name provided")
+		http.Error(w, "no room name provided", http.StatusBadRequest)
 		return
 	}
 
@@ -65,23 +91,24 @@ func generateOffer(comChan chan signalMsg, conn *websocket.Conn) {
 	if err := conn.WriteJSON(signalMsg{
 		Type: "requestOffer",
 	}); err != nil {
-		log.Println("write:", err)
+		log.Warn().Err(err).Msg("requestOffer write failed")
 		return
 	}
 
 	offerMsg := &signalMsg{}
 	if err := conn.ReadJSON(offerMsg); err != nil {
-		log.Println("read:", err)
+		log.Warn().Err(err).Msg("requestOffer read failed")
 		return
 	} else if offerMsg.Type != "offer" {
-		log.Println("expected offer from 'requestOffer' got:", offerMsg.Type)
+		msg := fmt.Sprint("expected offer from 'requestOffer' got:", offerMsg.Type)
+		log.Warn().Msg(msg)
 		return
 	}
 	comChan <- *offerMsg
 
 	answerMsg := <-comChan
 	if err := conn.WriteJSON(answerMsg); err != nil {
-		log.Println("write:", err)
+		log.Warn().Err(err).Msg("requestOffer reply failed")
 		return
 	}
 }
@@ -89,16 +116,17 @@ func generateOffer(comChan chan signalMsg, conn *websocket.Conn) {
 func generateAnswer(comChan chan signalMsg, conn *websocket.Conn) {
 	offer := <-comChan
 	if err := conn.WriteJSON(offer); err != nil {
-		log.Println("write:", err)
+		log.Warn().Err(err).Msg("offer write failed")
 		return
 	}
 
 	answerMsg := &signalMsg{}
 	if err := conn.ReadJSON(answerMsg); err != nil {
-		log.Println("read:", err)
+		log.Warn().Err(err).Msg("answer read failed")
 		return
 	} else if answerMsg.Type != "answer" {
-		log.Println("expected answer from 'offer' got:", answerMsg.Type)
+		msg := fmt.Sprint("expected answer from 'offer' got:", answerMsg.Type)
+		log.Warn().Msg(msg)
 		return
 	}
 	comChan <- *answerMsg

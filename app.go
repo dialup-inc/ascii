@@ -335,7 +335,7 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 		Text:  "Searching for match...",
 	})
 	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
-	if err := signal.Match(ctx, wsURL, conn.pc); err != nil {
+	if err := Match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
 	}
 

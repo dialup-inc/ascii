@@ -8,6 +8,11 @@ import (
 	"github.com/pion/webrtc/v2"
 )
 
+type signalMsg struct {
+	Type    string                    `json:"type"`
+	Payload webrtc.SessionDescription `json:"payload"`
+}
+
 func Match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
