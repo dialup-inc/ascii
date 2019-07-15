@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"math/rand"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,15 +13,14 @@ import (
 
 func NewServer() *Server {
 	s := &Server{
-		lobby: make(map[connID]*conn),
+		lobby: NewLobby(),
 	}
 	go s.doMatching()
 	return s
 }
 
 type Server struct {
-	lobbyMu sync.Mutex
-	lobby   map[connID]*conn
+	lobby *Lobby
 
 	nextID connID
 }
@@ -59,27 +57,20 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nextID := atomic.AddUint64((*uint64)(&s.nextID), 1)
-	id := connID(nextID)
+	id := atomic.AddUint64((*uint64)(&s.nextID), 1)
 
-	c := &conn{
-		ID: id,
+	s.lobby.Add(&conn{
+		ID: connID(id),
 		ws: ws,
-	}
+	})
 
-	s.lobbyMu.Lock()
-	s.lobby[id] = c
-	s.lobbyMu.Unlock()
-
-	log.Info().Uint64("id", nextID).Msg("new conn")
+	log.Info().
+		Uint64("id", id).
+		Msg("new conn")
 }
 
 func (s *Server) connComplete(c *conn) {
 	c.Close(websocket.CloseNormalClosure, "")
-
-	s.lobbyMu.Lock()
-	delete(s.lobby, c.ID)
-	s.lobbyMu.Unlock()
 
 	log.Info().
 		Uint64("id", uint64(c.ID)).
@@ -89,10 +80,6 @@ func (s *Server) connComplete(c *conn) {
 
 func (s *Server) connErr(c *conn, err error) {
 	c.Close(websocket.CloseInternalServerErr, err.Error())
-
-	s.lobbyMu.Lock()
-	delete(s.lobby, c.ID)
-	s.lobbyMu.Unlock()
 
 	log.Info().
 		Uint64("id", uint64(c.ID)).
@@ -105,6 +92,7 @@ func (s *Server) match(a, b *conn) {
 	offer, err := a.RequestOffer()
 	if err != nil {
 		s.connErr(a, err)
+		s.connErr(b, err)
 		return
 	}
 	answer, err := b.SendOffer(offer)
@@ -132,16 +120,11 @@ func (s *Server) match(a, b *conn) {
 func (s *Server) doMatching() {
 	ticker := time.NewTicker(5 * time.Second)
 	for range ticker.C {
-		s.lobbyMu.Lock()
-		var lobby []*conn
-		for _, c := range s.lobby {
-			lobby = append(lobby, c)
-		}
-		s.lobbyMu.Unlock()
+		candidates := s.lobby.Pop()
 
 		var partner *conn
-		for _, i := range rand.Perm(len(lobby)) {
-			c := lobby[i]
+		for _, i := range rand.Perm(len(candidates)) {
+			c := candidates[i]
 
 			if partner == nil {
 				partner = c
@@ -150,6 +133,10 @@ func (s *Server) doMatching() {
 
 			go s.match(c, partner)
 			partner = nil
+		}
+
+		if partner != nil {
+			s.lobby.Add(partner)
 		}
 	}
 }

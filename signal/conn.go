@@ -73,7 +73,7 @@ func (c *conn) SendOffer(offer interface{}) (answer interface{}, err error) {
 
 func (c *conn) SendAnswer(answer interface{}) error {
 	req := msg{
-		Type: msgTypeAnswer,
+		Type:    msgTypeAnswer,
 		Payload: answer,
 	}
 	resp := &msg{
@@ -83,7 +83,7 @@ func (c *conn) SendAnswer(answer interface{}) error {
 	if err := c.rpc(req, resp); err != nil {
 		return fmt.Errorf("send answer: %v", err)
 	}
-	
+
 	return nil
 }
 
