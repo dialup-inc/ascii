@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"errors"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v2"
@@ -14,9 +15,17 @@ type signalMsg struct {
 	Payload webrtc.SessionDescription `json:"payload"`
 }
 
+var errMatchFailed = errors.New("match failed")
+
 func Match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error {
 	err := match(ctx, wsURL, conn)
-	if e, ok := err.(*websocket.CloseError); ok && e.Code == websocket.CloseNormalClosure {
+	if e, ok := err.(*websocket.CloseError); ok {
+		switch e.Code {
+		case websocket.CloseNormalClosure:
+			return nil
+		case websocket.CloseAbnormalClosure, websocket.CloseInternalServerErr:
+			return errMatchFailed
+		}
 		return nil
 	}
 	if err != nil {

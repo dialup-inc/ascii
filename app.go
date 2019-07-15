@@ -178,10 +178,12 @@ func (a *App) run(ctx context.Context) error {
 			}
 		}
 
-		a.renderer.Dispatch(ui.LogEvent{
-			Level: ui.LogLevelInfo,
-			Text:  skipReason,
-		})
+		if skipReason != "" {
+			a.renderer.Dispatch(ui.LogEvent{
+				Level: ui.LogLevelInfo,
+				Text:  skipReason,
+			})
+		}
 		a.renderer.Dispatch(ui.FrameEvent(nil))
 
 		time.Sleep(100 * time.Millisecond)
@@ -368,7 +370,12 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		Level: ui.LogLevelInfo,
 		Text:  "Searching for match...",
 	})
-	if err := Match(ctx, a.signalerURL, conn.pc); err != nil {
+	
+	err = Match(ctx, a.signalerURL, conn.pc)
+	if err == errMatchFailed {
+		return "", nil
+	}
+	if err != nil {
 		return "", err
 	}
 
