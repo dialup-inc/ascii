@@ -38,9 +38,9 @@ We are looking for help developing a [Windows port](https://github.com/dialup-in
 
 #### Our Contributors
 
-[![maxhawkins](avatar/contributors/maxhawkins.png)](https://github.com/maxhawkins)
-[![Sean-Der](avatar/contributors/Sean-Der.png)](https://github.com/Sean-Der)
-[![djbaskin](avatar/contributors/djbaskin.png)](https://github.com/djbaskin)
+<a href="https://github.com/maxhawkins"><img src="avatar/contributors/maxhawkins.png" width="100" height="100"></a>
+<a href="https://github.com/Sean-Der"><img src="avatar/contributors/Sean-Der.png" width="100" height="100"></a>
+<a href="https://github.com/djbaskin"><img src="avatar/contributors/djbaskin.png" width="100" height="100"></a>
 
 ## Copyright
 
