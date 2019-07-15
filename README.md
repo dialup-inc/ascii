@@ -24,7 +24,7 @@ make
 
 ## Contributing
 
-Contributions and bug reports are welcome! Please check [the issues section](https://github.com/dialup-inc/ascii/issues)
+Contributions and bug reports are welcome! Please check [the issues section](https://github.com/dialup-inc/ascii/issues) before submitting.
 
 We are looking for help developing a [Windows port](https://github.com/dialup-inc/ascii/issues/13).
 
