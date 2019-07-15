@@ -255,10 +255,17 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 
 	desc := "This program connects you in a video chat with a random person!\nYour webcam will be activated. For more information visit dialup.com/ascii"
 	var descSections [][]string
+	for _, line := range strings.Split(desc, "\n") {
+		descSections = append(descSections, wordWrap(line, descWidth))
+	}
+
+	// Hide parts of the description if they're too long
 	var totalLength int
-	for i, line := range strings.Split(desc, "\n") {
-		lines := wordWrap(line, descWidth)
-		descSections = append(descSections, lines)
+	for i, lines := range descSections {
+		if totalLength + len(lines) > s.WinSize.Rows - 8 {
+			descSections = descSections[:i]
+			break
+		}
 
 		totalLength += len(lines)
 		if i > 0 {
@@ -269,12 +276,9 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	a.Normal()
 	a.Foreground(color.RGBA{0xAA, 0xAA, 0xAA, 0xFF})
 
-	descOffset := 5
+	descOffset := 4
 	for _, lines := range descSections {
 		// Don't display if it'll clip the button
-		if len(lines)+descOffset > s.WinSize.Rows-4 {
-			break
-		}
 
 		for i, line := range lines {
 			a.CursorPosition((s.WinSize.Rows-totalLength-8)/2+i+descOffset, (s.WinSize.Cols-len(line))/2+1)
