@@ -40,6 +40,6 @@ We are looking for help developing a [Windows port](https://github.com/dialup-in
 
 Code and documentation copyright 2019 [Dialup, Inc.](https://dialup.com)
 
-Code released under the [MIT license](https://raw.githubusercontent.com/dialup-inc/ascii/master/LICENSE).
+Code released under the [MIT license](LICENSE).
 
 [webmaster@dialup.com](mailto:webmaster@dialup.com)
