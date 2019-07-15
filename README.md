@@ -1,5 +1,5 @@
 # ASCII Roulette
-👾 ascii video chat client
+Make friends on the command line!
 
 [![License](https://img.shields.io/github/license/dialupdotcom/ascii_roulette.svg)](https://raw.githubusercontent.com/dialupdotcom/ascii_roulette/master/LICENSE)
 [![Build Status](https://travis-ci.org/dialupdotcom/ascii_roulette.svg?branch=master)](https://travis-ci.org/dialupdotcom/ascii_roulette)
