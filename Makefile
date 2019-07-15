@@ -14,11 +14,17 @@ LDFLAGS = \
 	-framework Foundation \
 	-framework AVFoundation
 
+ifeq ($(shell uname -s), Darwin)
+	libs = camera/libcam.a
+else
+	libs = 
+endif
+
 .PHONY: run
 run: ascii_roulette
 	./ascii_roulette
 
-ascii_roulette: camera/libcam.a *.go
+ascii_roulette: $(libs) *.go
 	go build -o $@ ./cmd/ascii_roulette
 
 camera/libcam.a: camera/cam_avfoundation.o
