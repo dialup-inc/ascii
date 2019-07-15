@@ -20,3 +20,9 @@ git clone https://github.com/dialupdotcom/ascii_roulette.git
 cd ascii_roulette
 make
 ```
+
+## Contributors
+
+[![maxhawkins](avatar/contributors/maxhawkins.png)](https://github.com/maxhawkins)
+[![Sean-Der](avatar/contributors/Sean-Der.png)](https://github.com/Sean-Der)
+[![djbaskin](avatar/contributors/djbaskin.png)](https://github.com/djbaskin)
