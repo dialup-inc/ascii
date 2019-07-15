@@ -100,7 +100,10 @@ func (a *App) run(ctx context.Context) error {
 
 	if err := a.capture.Start(0, 5); err != nil {
 		msg := fmt.Sprintf("camera error: %v", err)
-		a.renderer.Dispatch(ui.ErrorEvent(msg))
+		a.renderer.Dispatch(ui.LogEvent{
+			Level: ui.LogLevelError,
+			Text:  msg,
+		})
 		// TODO: show in ui and retry
 		return err
 	}
@@ -123,7 +126,10 @@ func (a *App) run(ctx context.Context) error {
 			break
 		}
 		if err != nil {
-			a.renderer.Dispatch(ui.ErrorEvent(err.Error()))
+			a.renderer.Dispatch(ui.LogEvent{
+				Level: ui.LogLevelError,
+				Text:  err.Error(),
+			})
 
 			sec := math.Pow(2, backoff) - 1
 			time.Sleep(time.Duration(sec) * time.Second)
@@ -132,7 +138,10 @@ func (a *App) run(ctx context.Context) error {
 			}
 			continue
 		}
-		a.renderer.Dispatch(ui.InfoEvent(skipReason))
+		a.renderer.Dispatch(ui.LogEvent{
+			Level: ui.LogLevelInfo,
+			Text:  skipReason,
+		})
 		a.renderer.Dispatch(ui.FrameEvent(nil))
 
 		time.Sleep(100 * time.Millisecond)
@@ -182,7 +191,10 @@ func (a *App) sendMessage() {
 
 	msg := a.renderer.GetState().Input
 	if err := a.conn.SendMessage(msg); err != nil {
-		a.renderer.Dispatch(ui.ErrorEvent("sending message failed"))
+		a.renderer.Dispatch(ui.LogEvent{
+			Level: ui.LogLevelError,
+			Text:  "sending message failed",
+		})
 	} else {
 		a.renderer.Dispatch(ui.SentMessageEvent(msg))
 	}
@@ -275,10 +287,16 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 		case webrtc.ICEConnectionStateConnected:
 			a.capture.RequestKeyframe()
 			connectTimeout.Stop()
-			a.renderer.Dispatch(ui.InfoEvent("Connected (type ctrl-d to skip)"))
+			a.renderer.Dispatch(ui.LogEvent{
+				Level: ui.LogLevelInfo,
+				Text:  "Connected (type ctrl-d to skip)",
+			})
 
 		case webrtc.ICEConnectionStateDisconnected:
-			a.renderer.Dispatch(ui.InfoEvent("Reconnecting..."))
+			a.renderer.Dispatch(ui.LogEvent{
+				Level: ui.LogLevelInfo,
+				Text:  "Reconnecting...",
+			})
 
 		case webrtc.ICEConnectionStateFailed:
 			ended <- "Lost connection"
@@ -306,7 +324,10 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 		a.capture.RequestKeyframe()
 	}
 
-	a.renderer.Dispatch(ui.InfoEvent("Searching for match..."))
+	a.renderer.Dispatch(ui.LogEvent{
+		Level: ui.LogLevelInfo,
+		Text:  "Searching for match...",
+	})
 	wsURL := fmt.Sprintf("ws://%s/ws?room=%s", signalerURL, room)
 	if err := signal.Match(ctx, wsURL, conn.pc); err != nil {
 		return "", err
@@ -314,7 +335,10 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 
 	connectTimeout.Reset(10 * time.Second)
 
-	a.renderer.Dispatch(ui.InfoEvent("Found match. Connecting..."))
+	a.renderer.Dispatch(ui.LogEvent{
+		Level: ui.LogLevelInfo,
+		Text:  "Found match. Connecting...",
+	})
 
 	select {
 	case <-ctx.Done():
@@ -331,7 +355,11 @@ func (a *App) connect(ctx context.Context, signalerURL, room string) (endReason 
 func (a *App) onKeypress(c rune) {
 	switch c {
 	case 3: // ctrl-c
-		a.renderer.Dispatch(ui.InfoEvent("Quitting..."))
+
+		a.renderer.Dispatch(ui.LogEvent{
+			Level: ui.LogLevelInfo,
+			Text:  "Quitting...",
+		})
 
 		a.cancelMu.Lock()
 		if a.quit != nil {

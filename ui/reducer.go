@@ -90,16 +90,18 @@ func messagesReducer(s []Message, event Event) []Message {
 			Text: string(e),
 		})
 
-	case ErrorEvent:
-		return append(s, Message{
-			User: "Info",
-			Text: string(e),
-		})
+	case LogEvent:
+		user := "Log"
+		switch e.Level {
+		case LogLevelError:
+			user = "Error"
+		case LogLevelInfo:
+			user = "Info"
+		}
 
-	case InfoEvent:
 		return append(s, Message{
-			User: "Info",
-			Text: string(e),
+			User: user,
+			Text: e.Text,
 		})
 
 	default:
