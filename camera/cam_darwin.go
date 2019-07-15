@@ -1,4 +1,3 @@
-// +build darwin
 package camera
 
 /*
