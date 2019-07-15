@@ -22,11 +22,13 @@ cd ascii_roulette
 make
 ```
 
-## Contributors
+## Contributing
 
 Contributions and bug reports are welcome! Please check [the issues section](https://github.com/dialup-inc/ascii/issues)
 
-We are looking for someone to help develop a [Windows port](https://github.com/dialup-inc/ascii/issues/13). Please let us know if you're interested in working on this.
+We are looking for help developing a [Windows port](https://github.com/dialup-inc/ascii/issues/13).
+
+#### Our Contributors
 
 [![maxhawkins](avatar/contributors/maxhawkins.png)](https://github.com/maxhawkins)
 [![Sean-Der](avatar/contributors/Sean-Der.png)](https://github.com/Sean-Der)
@@ -37,4 +39,4 @@ Code and documentation copyright 2019 [Dialup, Inc.](https://dialup.com)
 
 Code released under the [MIT license](https://raw.githubusercontent.com/dialup-inc/ascii/master/LICENSE).
 
-Contact [webmaster@dialup.com](mailto:webmaster@dialup.com).
+[webmaster@dialup.com](mailto:webmaster@dialup.com)
