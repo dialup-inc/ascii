@@ -2,11 +2,14 @@ dist: xenial
 language: go
 env:
   - GO111MODULE=on
-  - GOFLAGS='-mod vendor'
 go:
-  - 1.12.x
+  - 1.12.1
 git:
   depth: 1
+
+before_install:
+  - sudo apt-get update
+  - sudo apt-get install -y libvpx-dev
 
 install: true
 
