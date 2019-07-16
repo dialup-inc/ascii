@@ -34,7 +34,11 @@ make
 
 Contributions and bug reports are welcome! Please check [the issues section](https://github.com/dialup-inc/ascii/issues) before submitting.
 
-We are looking for help developing a [Windows port](https://github.com/dialup-inc/ascii/issues/13).
+Here are some starter issues if you'd like to help out:
+- [#13 - Windows Support](https://github.com/dialup-inc/ascii/issues/13)
+- [#36 - Rooms](https://github.com/dialup-inc/ascii/issues/34)
+- [#10 - Scrollback](https://github.com/dialup-inc/ascii/issues/10)
+- [#27 - Typing Indicator](https://github.com/dialup-inc/ascii/issues/27)
 
 #### Our Contributors
 
