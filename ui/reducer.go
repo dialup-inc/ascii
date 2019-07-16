@@ -26,6 +26,8 @@ func helpOnReducer(s bool, event Event) bool {
 		return !s
 	case SkipEvent:
 		return false
+	case SentMessageEvent:
+		return false
 	default:
 		return s
 	}
