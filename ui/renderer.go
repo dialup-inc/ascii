@@ -277,7 +277,7 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 		descWidth = maxWidth
 	}
 
-	desc := "This program connects you in a video chat with a random person!\n🎥 Your webcam will activate\n🔉 There is no audio"
+	desc := "This program connects you in a video chat with a random person!\n🎥  Your webcam will activate\n🔉  There is no audio\nClicking, you agree to the TOS: dialup.com/terms"
 	var descSections [][]string
 	for _, line := range strings.Split(desc, "\n") {
 		descSections = append(descSections, wordWrap(line, descWidth))
