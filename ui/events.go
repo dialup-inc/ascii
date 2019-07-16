@@ -32,6 +32,9 @@ type ResizeEvent term.WinSize
 // ToggleHelpEvent toggles the help modal
 type ToggleHelpEvent struct{}
 
+// SkipEvent skips to the next match
+type SkipEvent struct{}
+
 // SetPageEvent transitions to the specified page
 type SetPageEvent Page
 

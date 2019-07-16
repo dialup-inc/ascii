@@ -24,6 +24,8 @@ func helpOnReducer(s bool, event Event) bool {
 	switch event.(type) {
 	case ToggleHelpEvent:
 		return !s
+	case SkipEvent:
+		return false
 	default:
 		return s
 	}
@@ -90,6 +92,9 @@ func imageReducer(s image.Image, event Event) image.Image {
 		return image.Image(e)
 
 	case SetPageEvent:
+		return nil
+
+	case SkipEvent:
 		return nil
 
 	default:

@@ -428,6 +428,8 @@ func (a *App) onKeypress(c rune) {
 		}
 		a.cancelMu.Unlock()
 
+		a.renderer.Dispatch(ui.SkipEvent{})
+
 	case 20: // ctrl-t
 		a.renderer.Dispatch(ui.ToggleHelpEvent{})
 
