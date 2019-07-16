@@ -46,6 +46,14 @@ Here are some starter issues if you'd like to help out:
 <a href="https://github.com/Sean-Der"><img src="avatar/contributors/Sean-Der.png" width="100" height="100"></a>
 <a href="https://github.com/djbaskin"><img src="avatar/contributors/djbaskin.png" width="100" height="100"></a>
 
+## About Dialup
+
+This app is a project from the Dialup company hackathon.
+
+[Dialup](https://dialup.com) is a WebRTC-based voice chat app that connects you with a random person with a similar interest.
+
+And we're hiring! Visit [our jobs page](https://dialup.com/jobs) if you're interested. We ❤️ Go and WebRTC.
+
 ## Copyright
 
 Code and documentation Copyright 2019 [Dialup, Inc.](https://dialup.com)
