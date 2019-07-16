@@ -8,21 +8,48 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
+)
+
+var (
+	connsActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "conns_active",
+		Help: "The number of websocket connections currently active",
+	})
+	connsStarted = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "conns_started",
+		Help: "The number of connections we've seen so far",
+	})
+	connsFailed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "conns_failed",
+		Help: "The number of connections that closed with an error",
+	})
+	connsSucceeded = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "conns_succeeded",
+		Help: "The number of connections that closed successfully",
+	})
 )
 
 func NewServer() *Server {
 	s := &Server{
-		lobby: NewLobby(),
+		active:      NewGroup(),
+		lobby:       NewGroup(),
+		promHandler: promhttp.Handler(),
 	}
 	go s.doMatching()
 	return s
 }
 
 type Server struct {
-	lobby *Lobby
+	active *Group
+	lobby  *Group
 
 	nextID connID
+
+	promHandler http.Handler
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +58,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.HandleStatus(w, r)
 	case "/ws":
 		s.HandleWS(w, r)
+	case "/metrics":
+		s.promHandler.ServeHTTP(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -59,10 +88,12 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 
 	id := atomic.AddUint64((*uint64)(&s.nextID), 1)
 
-	s.lobby.Add(&conn{
-		ID: connID(id),
-		ws: ws,
-	})
+	conn := newConn(connID(id), ws)
+	s.active.Add(conn)
+	s.lobby.Add(conn)
+
+	connsActive.Inc()
+	connsStarted.Inc()
 
 	log.Info().
 		Uint64("id", id).
@@ -76,6 +107,10 @@ func (s *Server) connComplete(c *conn) {
 		Msg("conn closed")
 
 	c.Close(websocket.CloseNormalClosure, "")
+
+	s.active.Remove(c.ID)
+	connsActive.Dec()
+	connsSucceeded.Inc()
 }
 
 func (s *Server) connErr(c *conn, err error) {
@@ -86,6 +121,10 @@ func (s *Server) connErr(c *conn, err error) {
 		Msg("conn closed")
 
 	c.Close(websocket.CloseInternalServerErr, err.Error())
+
+	s.active.Remove(c.ID)
+	connsActive.Dec()
+	connsFailed.Inc()
 }
 
 func (s *Server) handshake(a, b *conn) error {

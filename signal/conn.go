@@ -31,6 +31,13 @@ type conn struct {
 	ws   *websocket.Conn
 }
 
+func newConn(id connID, ws *websocket.Conn) *conn {
+	return &conn{
+		ID: id,
+		ws: ws,
+	}
+}
+
 func (c *conn) Close(code int, reason string) error {
 	deadline := time.Now().Add(100 * time.Millisecond)
 	msg := websocket.FormatCloseMessage(code, reason)
