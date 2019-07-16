@@ -26,7 +26,17 @@ type State struct {
 	WinSize  term.WinSize
 }
 
+type MessageType int
+
+const (
+	MessageTypeIncoming MessageType = iota
+	MessageTypeOutgoing
+	MessageTypeInfo
+	MessageTypeError
+)
+
 type Message struct {
+	Type MessageType
 	User string
 	Text string
 }

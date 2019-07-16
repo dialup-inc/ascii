@@ -146,22 +146,53 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.Background(color.RGBA{0x22, 0x22, 0x22, 0xFF})
 
 	drawChatLine := func(m Message) {
-		if m.User == "You" {
-			a.Foreground(color.RGBA{0xFF, 0xFF, 0, 0xFF})
-		} else if m.User == "Them" {
+		switch m.Type {
+		case MessageTypeIncoming:
 			a.Foreground(color.RGBA{0xFF, 0, 0, 0xFF})
-		} else {
+			buf.WriteString(" ")
+			buf.WriteString(m.User)
+			buf.WriteString(": ")
 			a.Foreground(color.RGBA{0x99, 0x99, 0x99, 0xFF})
-		}
+			buf.WriteString(m.Text)
 
-		buf.WriteString(" ")
-		buf.WriteString(m.User)
-		buf.WriteString(": ")
-		a.Foreground(color.RGBA{0x99, 0x99, 0x99, 0xFF})
-		buf.WriteString(m.Text)
-		textLen := utf8.RuneCountInString(m.User) + utf8.RuneCountInString(m.Text) + 3
-		if width > textLen {
-			buf.WriteString(strings.Repeat(" ", width-textLen))
+			textLen := utf8.RuneCountInString(m.User) + utf8.RuneCountInString(m.Text) + 3
+			if width > textLen {
+				buf.WriteString(strings.Repeat(" ", width-textLen))
+			}
+
+		case MessageTypeOutgoing:
+			a.Foreground(color.RGBA{0xFF, 0xFF, 0, 0xFF})
+			buf.WriteString(" ")
+			buf.WriteString(m.User)
+			buf.WriteString(": ")
+			a.Foreground(color.RGBA{0x99, 0x99, 0x99, 0xFF})
+			buf.WriteString(m.Text)
+
+			textLen := utf8.RuneCountInString(m.User) + utf8.RuneCountInString(m.Text) + 3
+			if width > textLen {
+				buf.WriteString(strings.Repeat(" ", width-textLen))
+			}
+
+		case MessageTypeInfo:
+			a.Foreground(color.RGBA{0x99, 0x99, 0x99, 0xFF})
+			buf.WriteString(" ")
+			buf.WriteString(m.Text)
+
+			textLen := utf8.RuneCountInString(m.Text) + 1
+			if width > textLen {
+				buf.WriteString(strings.Repeat(" ", width-textLen))
+			}
+
+		case MessageTypeError:
+			a.Foreground(color.RGBA{0xAA, 0x00, 0x00, 0xFF})
+			buf.WriteString(" ")
+			buf.WriteString(m.Text)
+
+			textLen := utf8.RuneCountInString(m.Text) + 1
+			if width > textLen {
+				buf.WriteString(strings.Repeat(" ", width-textLen))
+			}
+
 		}
 	}
 

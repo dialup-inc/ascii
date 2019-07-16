@@ -106,27 +106,26 @@ func messagesReducer(s []Message, event Event) []Message {
 	switch e := event.(type) {
 	case SentMessageEvent:
 		return append(s, Message{
+			Type: MessageTypeOutgoing,
 			User: "You",
 			Text: string(e),
 		})
 
 	case ReceivedChatEvent:
 		return append(s, Message{
+			Type: MessageTypeIncoming,
 			User: "Them",
 			Text: string(e),
 		})
 
 	case LogEvent:
-		user := "Log"
-		switch e.Level {
-		case LogLevelError:
-			user = "Error"
-		case LogLevelInfo:
-			user = "Info"
+		mtype := MessageTypeInfo
+		if e.Level == LogLevelError {
+			mtype = MessageTypeError
 		}
 
 		return append(s, Message{
-			User: user,
+			Type: mtype,
 			Text: e.Text,
 		})
 
