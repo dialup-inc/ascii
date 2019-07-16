@@ -11,13 +11,25 @@ import (
 
 func StateReducer(s State, event Event) State {
 	s.Image = imageReducer(s.Image, event)
-	s.Input = inputReducer(s.Input, s.Page, event)
+	s.ChatActive = chatActiveReducer(s.ChatActive, event)
+	s.Input = inputReducer(s.Input, s.ChatActive, event)
 	s.Messages = messagesReducer(s.Messages, event)
 	s.Page = pageReducer(s.Page, event)
 	s.WinSize = winSizeReducer(s.WinSize, event)
 	s.HelpOn = helpOnReducer(s.HelpOn, event)
 
 	return s
+}
+
+func chatActiveReducer(s bool, event Event) bool {
+	switch event.(type) {
+	case DataOpenedEvent:
+		return true
+	case ConnEndedEvent:
+		return false
+	default:
+		return s
+	}
 }
 
 func helpOnReducer(s bool, event Event) bool {
@@ -53,13 +65,16 @@ func winSizeReducer(s term.WinSize, event Event) term.WinSize {
 
 var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
-func inputReducer(s string, page Page, event Event) string {
-	if page != ChatPage {
-		return s
-	}
-
+func inputReducer(s string, chatActive bool, event Event) string {
 	switch e := event.(type) {
+	case ConnStartedEvent:
+		return ""
+
 	case KeypressEvent:
+		if !chatActive {
+			return s
+		}
+
 		s += string(e)
 
 		// Strip ANSI escape codes
@@ -78,6 +93,10 @@ func inputReducer(s string, page Page, event Event) string {
 		return s
 
 	case BackspaceEvent:
+		if !chatActive {
+			return s
+		}
+
 		if len(s) == 0 {
 			return s
 		}
@@ -122,6 +141,12 @@ func messagesReducer(s []Message, event Event) []Message {
 			Type: MessageTypeIncoming,
 			User: "Them",
 			Text: string(e),
+		})
+
+	case ConnStartedEvent:
+		return append(s, Message{
+			Type: MessageTypeInfo,
+			Text: "Connected",
 		})
 
 	case LogEvent:

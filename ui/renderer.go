@@ -110,7 +110,79 @@ func (r *Renderer) drawHead(buf *bytes.Buffer) {
 	buf.WriteString(line2)
 
 	remaining := s.WinSize.Cols - len(line1) - len(line2)
-	buf.WriteString(strings.Repeat(" ", remaining))
+	if remaining > 0 {
+		buf.WriteString(strings.Repeat(" ", remaining))
+	}
+}
+
+func (r *Renderer) drawPrompt(buf *bytes.Buffer, s State) {
+	a := term.ANSI{buf}
+
+	prompt := " > "
+	input := s.Input
+
+	width := s.WinSize.Cols
+	row := s.WinSize.Rows
+
+	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
+	a.Bold()
+
+	// Clear what's there
+	a.CursorPosition(row, 1)
+	buf.WriteString(strings.Repeat(" ", width))
+
+	// Then write the line
+	a.CursorPosition(row, 1)
+
+	var lineLen int
+
+	if !s.ChatActive {
+		a.Foreground(color.RGBA{0x33, 0x33, 0x33, 0XFF})
+		buf.WriteString(prompt)
+		return
+	}
+
+	// Add prompt
+	a.Foreground(color.White)
+	buf.WriteString(prompt)
+	lineLen += len(prompt)
+
+	// Add input
+	input = truncate(input, width-lineLen, "…")
+	buf.WriteString(input)
+	lineLen += len(input)
+
+	// Add blinking cursor where you're supposed to type
+	cursor := "_"
+	if lineLen+len(cursor) < width {
+		a.Foreground(color.White)
+		a.Blink()
+		buf.WriteString(cursor)
+		a.BlinkOff()
+		lineLen += len(cursor)
+	}
+
+	// add label
+	label := " Send a message."
+	label = truncate(label, width-lineLen, "")
+	if input == "" {
+		a.Foreground(color.RGBA{0x33, 0x33, 0x33, 0xFF})
+		buf.WriteString(label)
+		lineLen += len(label)
+	}
+}
+
+func truncate(s string, n int, ellipsis string) string {
+	if len(s) <= n {
+		return s
+	}
+
+	maxLen := n - len(ellipsis)
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+
+	return s + ellipsis
 }
 
 func (r *Renderer) drawChat(buf *bytes.Buffer) {
@@ -123,7 +195,6 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	width := s.WinSize.Cols
 	chatTop := s.WinSize.Rows - chatHeight + 1
 	logTop := chatTop + 1
-	chatBottom := logTop + 3
 
 	a.CursorPosition(chatTop, 1)
 	// Draw background
@@ -210,34 +281,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 		buf.WriteString(strings.Repeat(" ", width))
 	}
 
-	input := s.Input
-
-	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
-	a.Foreground(color.White)
-	a.Bold()
-
-	// First clear
-	a.CursorPosition(chatBottom, 0)
-	textLen = utf8.RuneCountInString(input) + 4
-	if width > textLen {
-		buf.WriteString(strings.Repeat(" ", width))
-	}
-
-	// Then write line
-	a.CursorPosition(chatBottom, 0)
-	inputLine := " > " + input
-	if len(inputLine) >= width {
-		inputLine = inputLine[:width-1] + "…"
-	}
-	buf.WriteString(inputLine)
-
-	// Add blinking cursor where you're supposed to type
-	if len(inputLine) < width {
-		a.Blink()
-		buf.WriteString("_")
-	}
-
-	a.BlinkOff()
+	r.drawPrompt(buf, s)
 }
 
 func (r *Renderer) drawTitle(buf *bytes.Buffer, line string) {
@@ -354,13 +398,17 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	}
 
 	a.CursorPosition(s.WinSize.Rows-3, (s.WinSize.Cols-len(line))/2+1)
-	buf.WriteString(strings.Repeat(" ", len(line)))
+	if len(line) > 0 {
+		buf.WriteString(strings.Repeat(" ", len(line)))
+	}
 
 	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line))/2+1)
 	buf.WriteString(line)
 
 	a.CursorPosition(s.WinSize.Rows-1, (s.WinSize.Cols-len(line))/2+1)
-	buf.WriteString(strings.Repeat(" ", len(line)))
+	if len(line) > 0 {
+		buf.WriteString(strings.Repeat(" ", len(line)))
+	}
 }
 
 func (r *Renderer) drawHelp(buf *bytes.Buffer) {

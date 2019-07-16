@@ -317,6 +317,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		conn.OnICEConnectionStateChange = func(webrtc.ICEConnectionState) {}
 		conn.OnFrame = func([]byte) {}
 		conn.OnPLI = func() {}
+		conn.OnDataOpen = func() {}
 
 		// Send Goodbye packet
 		if conn.IsConnected() {
@@ -336,10 +337,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		case webrtc.ICEConnectionStateConnected:
 			a.capture.RequestKeyframe()
 			connectTimeout.Stop()
-			a.renderer.Dispatch(ui.LogEvent{
-				Level: ui.LogLevelInfo,
-				Text:  "Connected",
-			})
+			a.renderer.Dispatch(ui.ConnStartedEvent{})
 
 		case webrtc.ICEConnectionStateDisconnected:
 			a.renderer.Dispatch(ui.LogEvent{
@@ -350,6 +348,9 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		case webrtc.ICEConnectionStateFailed:
 			ended <- "Lost connection"
 		}
+	}
+	conn.OnDataOpen = func() {
+		a.renderer.Dispatch(ui.DataOpenedEvent{})
 	}
 
 	a.capture.SetTrack(conn.SendTrack)
@@ -393,16 +394,21 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		Text:  "Found match. Connecting...",
 	})
 
+	var reason string
 	select {
 	case <-ctx.Done():
-		return "", nil
+		reason = ""
 	case <-connectTimeout.C:
-		return "Connection timed out", nil
+		reason = "Connection timed out"
 	case <-frameTimeout.C:
-		return "Lost connection", nil
-	case reason := <-ended:
-		return reason, nil
+		reason = "Lost connection"
+	case r := <-ended:
+		reason = r
 	}
+
+	a.renderer.Dispatch(ui.ConnEndedEvent{reason})
+
+	return reason, nil
 }
 
 func (a *App) onKeypress(c rune) {

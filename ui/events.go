@@ -35,6 +35,18 @@ type ToggleHelpEvent struct{}
 // SkipEvent skips to the next match
 type SkipEvent struct{}
 
+// DataOpenedEvent fires when the text chat data channel opens and the user can begin typing
+type DataOpenedEvent struct{}
+
+// ConnStartedEvent fires when an ICE connection has been established and the call can begin
+type ConnStartedEvent struct{}
+
+// ConnEndedEvent fires when the connection with your partner has been lost
+type ConnEndedEvent struct {
+	// The reason for the disconnection
+	Reason string
+}
+
 // SetPageEvent transitions to the specified page
 type SetPageEvent Page
 

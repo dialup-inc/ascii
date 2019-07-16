@@ -27,6 +27,7 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 		OnFrame:                    func([]byte) {},
 		OnMessage:                  func(string) {},
 		OnBye:                      func() {},
+		OnDataOpen:                 func() {},
 		OnICEConnectionStateChange: func(webrtc.ICEConnectionState) {},
 	}
 
@@ -63,6 +64,7 @@ func NewConn(config webrtc.Configuration) (*Conn, error) {
 	conn.dc = dc
 
 	dc.OnMessage(conn.onMessage)
+	dc.OnOpen(conn.onDataOpen)
 
 	return conn, nil
 }
@@ -74,6 +76,7 @@ type Conn struct {
 	OnMessage                  func(string)
 	OnICEConnectionStateChange func(webrtc.ICEConnectionState)
 	OnBye                      func()
+	OnDataOpen                 func()
 
 	pc        *webrtc.PeerConnection
 	recvTrack *webrtc.Track
@@ -130,6 +133,10 @@ func (c *Conn) readRTP(track *webrtc.Track) {
 			c.OnFrame(s.Data)
 		}
 	}
+}
+
+func (c *Conn) onDataOpen() {
+	c.OnDataOpen()
 }
 
 func (c *Conn) onMessage(msg webrtc.DataChannelMessage) {

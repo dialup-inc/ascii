@@ -20,7 +20,9 @@ type State struct {
 
 	HelpOn bool
 
-	Input    string
+	Input      string
+	ChatActive bool
+
 	Messages []Message
 	Image    image.Image
 	WinSize  term.WinSize
