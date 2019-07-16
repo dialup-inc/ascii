@@ -91,7 +91,7 @@ function main() {
     md5="$(getMD5 /tmp/ascii_roulette)"
     
     if [ -n "$(checkEtag $binaryURL $md5)" ]; then
-        echo -e "Downloading ASCII Roulette\e[5m...\e[0m"
+        printf "Downloading ASCII Roulette\033[5m...\033[0m\n"
         curl -fs "$binaryURL" > /tmp/ascii_roulette
     fi
     
