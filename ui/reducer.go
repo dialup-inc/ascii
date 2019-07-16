@@ -4,6 +4,7 @@ import (
 	"image"
 	"regexp"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/dialup-inc/ascii/term"
 )
@@ -62,7 +63,8 @@ func inputReducer(s string, event Event) string {
 		if len(s) == 0 {
 			return s
 		}
-		return s[:len(s)-1]
+		_, sz := utf8.DecodeLastRuneInString(s)
+		return s[:len(s)-sz]
 
 	case SentMessageEvent:
 		return ""
