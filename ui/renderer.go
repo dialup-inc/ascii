@@ -71,12 +71,8 @@ func getAspect(w term.WinSize) float64 {
 	return float64(w.Height) * float64(w.Cols) / float64(w.Rows) / float64(w.Width)
 }
 
-func (r *Renderer) drawVideo(buf *bytes.Buffer, headHeight int) {
+func (r *Renderer) drawVideo(buf *bytes.Buffer, s State, headHeight int) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	vidW, vidH := s.WinSize.Cols, s.WinSize.Rows-chatHeight-headHeight
 
@@ -89,12 +85,8 @@ func (r *Renderer) drawVideo(buf *bytes.Buffer, headHeight int) {
 	buf.Write(imgANSI)
 }
 
-func (r *Renderer) drawHead(buf *bytes.Buffer) {
+func (r *Renderer) drawHead(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	line1 := " dialup.com/ascii"
 	line2 := " (we're hiring!)"
@@ -186,12 +178,8 @@ func truncate(s string, n int, ellipsis string) string {
 	return s + ellipsis
 }
 
-func (r *Renderer) drawChat(buf *bytes.Buffer) {
+func (r *Renderer) drawChat(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	width := s.WinSize.Cols
 	chatTop := s.WinSize.Rows - chatHeight + 1
@@ -285,30 +273,30 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	r.drawPrompt(buf, s)
 }
 
-func (r *Renderer) drawTitle(buf *bytes.Buffer, line string) {
+func (r *Renderer) drawTitle(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	// Draw background
 	a.Bold()
+
+	var text string
+	switch s.Page {
+	case GlobePage:
+		text = "Presented by dialup.com"
+	case PionPage:
+		text = "Powered by Pion"
+	}
 
 	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
 	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*chatHeight))
 
 	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
-	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line))/2+1)
-	buf.WriteString(line)
+	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(text))/2+1)
+	buf.WriteString(text)
 }
 
-func (r *Renderer) drawBlank(buf *bytes.Buffer) {
+func (r *Renderer) drawBlank(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
 
@@ -316,12 +304,8 @@ func (r *Renderer) drawBlank(buf *bytes.Buffer) {
 	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*s.WinSize.Rows))
 }
 
-func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
+func (r *Renderer) drawConfirm(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	// Blank background
 	a.Background(color.RGBA{0x00, 0x00, 0x00, 0xFF})
@@ -412,12 +396,8 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	}
 }
 
-func (r *Renderer) drawHelp(buf *bytes.Buffer) {
+func (r *Renderer) drawHelp(buf *bytes.Buffer, s State) {
 	a := term.ANSI{buf}
-
-	r.stateMu.Lock()
-	s := r.state
-	r.stateMu.Unlock()
 
 	rows := []string{
 		"                 ",
@@ -488,26 +468,26 @@ func (r *Renderer) draw() {
 
 	switch s.Page {
 	case GlobePage:
-		r.drawTitle(buf, "Presented by dialup.com")
-		r.drawVideo(buf, 0)
+		r.drawTitle(buf, s)
+		r.drawVideo(buf, s, 0)
 
 	case PionPage:
-		r.drawTitle(buf, "Powered by Pion")
-		r.drawVideo(buf, 0)
+		r.drawTitle(buf, s)
+		r.drawVideo(buf, s, 0)
 
 	case ChatPage:
-		r.drawHead(buf)
-		r.drawChat(buf)
-		r.drawVideo(buf, 1)
+		r.drawHead(buf, s)
+		r.drawChat(buf, s)
+		r.drawVideo(buf, s, 1)
 		if s.HelpOn {
-			r.drawHelp(buf)
+			r.drawHelp(buf, s)
 		}
 
 	case ConfirmPage:
-		r.drawConfirm(buf)
+		r.drawConfirm(buf, s)
 
 	default:
-		r.drawBlank(buf)
+		r.drawBlank(buf, s)
 	}
 
 	io.Copy(os.Stdout, buf)
