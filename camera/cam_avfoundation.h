@@ -10,7 +10,8 @@ extern "C" {
 #define E_OPEN_CAMERA_FAILED -2
 #define E_CAMERA_NOT_FOUND -3
 
-typedef void (*FrameCallback)(void *userdata, void *buf, int len);
+typedef void (*FrameCallback)(void *userdata, void *buf, int len, int width,
+                              int height);
 
 typedef void *Camera;
 int cam_init(Camera *cam, FrameCallback callback, void *userdata);

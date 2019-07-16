@@ -85,7 +85,8 @@ void NV12_YUV420P(const unsigned char *image_src, unsigned char *image_dst,
   unsigned char *i420_image = (unsigned char *)malloc(frame_size);
   NV12_YUV420P(y_plane_address, i420_image, y_plane_width, y_plane_height);
 
-  self->mCallback(self->mUserdata, i420_image, frame_size);
+  self->mCallback(self->mUserdata, i420_image, frame_size, y_plane_width,
+                  y_plane_height);
 
   free(i420_image);
 

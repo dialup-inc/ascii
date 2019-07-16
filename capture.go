@@ -68,7 +68,11 @@ func (c *Capture) SetTrack(track *webrtc.Track) {
 	c.track = track
 }
 
-func (c *Capture) onFrame(img image.Image) {
+func (c *Capture) onFrame(img image.Image, err error) {
+	if err != nil {
+		return
+	}
+
 	if !atomic.CompareAndSwapUint32(&c.encodeLock, 0, 1) {
 		return
 	}

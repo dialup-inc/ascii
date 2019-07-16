@@ -105,4 +105,4 @@ function main() {
     fi
 }
 
-main
+echo <<EOF

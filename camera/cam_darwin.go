@@ -5,9 +5,9 @@ package camera
 
 #include "cam_avfoundation.h"
 
-extern void onFrame(void *userdata, void *buf, int len);
-void onFrame_cgo(void *userdata, void *buf, int len) {
-	onFrame(userdata, buf, len);
+extern void onFrame(void *userdata, void *buf, int len, int width, int height);
+void onFrame_cgo(void *userdata, void *buf, int len, int width, int height) {
+	onFrame(userdata, buf, len, width, height);
 }
 */
 import "C"
@@ -19,14 +19,12 @@ import (
 	"github.com/dialup-inc/ascii/yuv"
 )
 
+type FrameCallback func(image.Image, error)
 type Camera struct {
 	c C.Camera
 
-	width int
-	height int
-
 	handleID handleID
-	callback func(image.Image)
+	callback FrameCallback
 }
 
 type CamError int
@@ -52,9 +50,6 @@ func (c CamError) Error() string {
 }
 
 func (c *Camera) Start(camID, width, height int) error {
-	c.width = width
-	c.height = height
-
 	if ret := C.cam_start(c.c, C.int(camID), C.int(width), C.int(height)); ret != 0 {
 		return CamError(ret)
 	}
@@ -66,20 +61,16 @@ func (c *Camera) Close() error {
 	return nil
 }
 
-func (c *Camera) onFrame(data []byte) {
-	img, err := yuv.FromI420(data, c.width, c.height)
-	if err != nil {
-		panic(err)
-	}
-	c.callback(img)
+func (c *Camera) onFrame(data []byte, width, height int) {
+	c.callback(yuv.FromI420(data, width, height))
 }
 
-func New(cb func(image.Image)) (*Camera, error) {
+func New(cb FrameCallback) (*Camera, error) {
 	cam := &Camera{}
 
 	cam.callback = cb
-	cam.handleID = register(func(data []byte) {
-		cam.onFrame(data)
+	cam.handleID = register(func(data []byte, width, height int) {
+		cam.onFrame(data, width, height)
 	})
 
 	if ret := C.cam_init(&cam.c, (C.FrameCallback)(unsafe.Pointer(C.onFrame_cgo)), unsafe.Pointer(&cam.handleID)); ret != 0 {
