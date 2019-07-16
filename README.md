@@ -50,7 +50,7 @@ Here are some starter issues if you'd like to help out:
 
 This app is a project from the Dialup company hackathon.
 
-[Dialup](https://dialup.com) is a WebRTC-based voice chat app that connects you with a random person with a similar interest.
+[Dialup](https://dialup.com) is a WebRTC-based voice chat app that connects you to a random person with a similar interest.
 
 _We're hiring!_ Visit [our jobs page](https://dialup.com/jobs) to learn more. We ❤️ Go and WebRTC.
 
