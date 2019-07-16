@@ -447,6 +447,8 @@ func (a *App) onKeypress(c rune) {
 		a.sendMessage()
 
 	case ' ':
+		a.renderer.Dispatch(ui.KeypressEvent(c))
+
 		a.cancelMu.Lock()
 		if a.skipIntro != nil {
 			a.skipIntro()
@@ -457,8 +459,6 @@ func (a *App) onKeypress(c rune) {
 			a.startChat = nil
 		}
 		a.cancelMu.Unlock()
-
-		a.renderer.Dispatch(ui.KeypressEvent(c))
 
 	default:
 		a.renderer.Dispatch(ui.KeypressEvent(c))

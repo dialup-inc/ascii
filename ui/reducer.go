@@ -11,7 +11,7 @@ import (
 
 func StateReducer(s State, event Event) State {
 	s.Image = imageReducer(s.Image, event)
-	s.Input = inputReducer(s.Input, event)
+	s.Input = inputReducer(s.Input, s.Page, event)
 	s.Messages = messagesReducer(s.Messages, event)
 	s.Page = pageReducer(s.Page, event)
 	s.WinSize = winSizeReducer(s.WinSize, event)
@@ -53,7 +53,11 @@ func winSizeReducer(s term.WinSize, event Event) term.WinSize {
 
 var ansiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
-func inputReducer(s string, event Event) string {
+func inputReducer(s string, page Page, event Event) string {
+	if page != ChatPage {
+		return s
+	}
+
 	switch e := event.(type) {
 	case KeypressEvent:
 		s += string(e)
