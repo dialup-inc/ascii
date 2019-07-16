@@ -42,3 +42,20 @@ type Message struct {
 	User string
 	Text string
 }
+
+type EndConnReason int
+
+const (
+	// User closed connection
+	EndConnNormal EndConnReason = iota
+	// Error during connection setup
+	EndConnSetupError
+	// Error during matching
+	EndConnMatchError
+	// Connection timed out
+	EndConnTimedOut
+	// Lost connection with partner
+	EndConnDisconnected
+	// Partner left
+	EndConnGone
+)

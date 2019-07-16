@@ -44,7 +44,7 @@ type ConnStartedEvent struct{}
 // ConnEndedEvent fires when the connection with your partner has been lost
 type ConnEndedEvent struct {
 	// The reason for the disconnection
-	Reason string
+	Reason EndConnReason
 }
 
 // SetPageEvent transitions to the specified page

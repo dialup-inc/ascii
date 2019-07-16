@@ -143,6 +143,46 @@ func messagesReducer(s []Message, event Event) []Message {
 			Text: string(e),
 		})
 
+	case ConnEndedEvent:
+		var msg Message
+
+		switch e.Reason {
+
+		// Error handler will catch this
+		case EndConnSetupError:
+			return s
+
+		// We ignore match errors
+		case EndConnMatchError:
+			return s
+
+		case EndConnNormal:
+			msg = Message{
+				Type: MessageTypeInfo,
+				Text: "Skipping...",
+			}
+
+		case EndConnTimedOut:
+			msg = Message{
+				Type: MessageTypeError,
+				Text: "Connection timed out.",
+			}
+
+		case EndConnDisconnected:
+			msg = Message{
+				Type: MessageTypeError,
+				Text: "Lost connection.",
+			}
+
+		case EndConnGone:
+			msg = Message{
+				Type: MessageTypeInfo,
+				Text: "Your partner left the chat.",
+			}
+		}
+
+		return append(s, msg)
+
 	case ConnStartedEvent:
 		return append(s, Message{
 			Type: MessageTypeInfo,

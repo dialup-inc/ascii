@@ -151,7 +151,7 @@ func (a *App) run(ctx context.Context) error {
 		a.nextPartner = nextPartner
 		a.cancelMu.Unlock()
 
-		skipReason, err := a.connect(connCtx)
+		endReason, err := a.connect(connCtx)
 		// HACK(maxhawkins): these errors get returned when the context passed
 		// into match is canceled, so we ignore them. There's probably a more elegant
 		// way to close the websocket without all this error munging.
@@ -178,12 +178,7 @@ func (a *App) run(ctx context.Context) error {
 			}
 		}
 
-		if skipReason != "" {
-			a.renderer.Dispatch(ui.LogEvent{
-				Level: ui.LogLevelInfo,
-				Text:  skipReason,
-			})
-		}
+		a.renderer.Dispatch(ui.ConnEndedEvent{endReason})
 		a.renderer.Dispatch(ui.FrameEvent(nil))
 
 		time.Sleep(100 * time.Millisecond)
@@ -284,7 +279,7 @@ func (a *App) checkConnection(ctx context.Context) error {
 	}
 }
 
-func (a *App) connect(ctx context.Context) (endReason string, err error) {
+func (a *App) connect(ctx context.Context) (ui.EndConnReason, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -295,10 +290,10 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 	connectTimeout.Stop()
 
 	if err := a.checkConnection(ctx); err != nil {
-		return "", err
+		return ui.EndConnSetupError, err
 	}
 
-	ended := make(chan string)
+	ended := make(chan ui.EndConnReason)
 
 	conn, err := NewConn(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
@@ -306,7 +301,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		},
 	})
 	if err != nil {
-		return "", err
+		return ui.EndConnSetupError, err
 	}
 	a.conn = conn
 
@@ -327,7 +322,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 
 	conn.OnBye = func() {
 		a.renderer.Dispatch(ui.FrameEvent(nil))
-		ended <- "Partner left"
+		ended <- ui.EndConnGone
 	}
 	conn.OnMessage = func(s string) {
 		a.renderer.Dispatch(ui.ReceivedChatEvent(s))
@@ -346,7 +341,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 			})
 
 		case webrtc.ICEConnectionStateFailed:
-			ended <- "Lost connection"
+			ended <- ui.EndConnDisconnected
 		}
 	}
 	conn.OnDataOpen = func() {
@@ -357,7 +352,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 
 	dec, err := vpx.NewDecoder(320, 240)
 	if err != nil {
-		return "", err
+		return ui.EndConnSetupError, err
 	}
 	conn.OnFrame = func(frame []byte) {
 		frameTimeout.Reset(5 * time.Second)
@@ -381,10 +376,10 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 
 	err = Match(ctx, a.signalerURL, conn.pc)
 	if err == errMatchFailed {
-		return "", nil
+		return ui.EndConnMatchError, nil
 	}
 	if err != nil {
-		return "", err
+		return ui.EndConnMatchError, err
 	}
 
 	connectTimeout.Reset(10 * time.Second)
@@ -394,19 +389,17 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 		Text:  "Found match. Connecting...",
 	})
 
-	var reason string
+	var reason ui.EndConnReason
 	select {
 	case <-ctx.Done():
-		reason = ""
+		reason = ui.EndConnNormal
 	case <-connectTimeout.C:
-		reason = "Connection timed out"
+		reason = ui.EndConnTimedOut
 	case <-frameTimeout.C:
-		reason = "Lost connection"
+		reason = ui.EndConnDisconnected
 	case r := <-ended:
 		reason = r
 	}
-
-	a.renderer.Dispatch(ui.ConnEndedEvent{reason})
 
 	return reason, nil
 }
