@@ -100,6 +100,7 @@ func (r *Renderer) drawHead(buf *bytes.Buffer) {
 	line2 := " (we're hiring!)"
 
 	a.CursorPosition(1, 1)
+	a.Normal()
 
 	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
 
