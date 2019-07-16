@@ -16,6 +16,11 @@ func Image2ANSI(img image.Image, cols, rows int, aspect float64, lightBackground
 	buf := bytes.NewBuffer(nil)
 	a := term.ANSI{buf}
 
+	// FIXME: Work around panic in resize when image is too small
+	if rows < 2 || cols < 2 {
+		return nil
+	}
+
 	colors := term.ANSIPalette
 	canvasRect := image.Rect(0, 0, cols, rows)
 	canvas := image.NewPaletted(canvasRect, colors)
