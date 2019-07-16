@@ -13,13 +13,10 @@ void onFrame_cgo(void *userdata, void *buf, int len, int width, int height) {
 import "C"
 import (
 	"fmt"
-	"image"
 	"unsafe"
 
 	"github.com/dialup-inc/ascii/yuv"
 )
-
-type FrameCallback func(image.Image, error)
 type Camera struct {
 	c C.Camera
 

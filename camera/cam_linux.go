@@ -3,7 +3,6 @@ package camera
 import (
 	"bytes"
 	"fmt"
-	"image"
 	"image/jpeg"
 	"os"
 	"strings"
@@ -14,7 +13,7 @@ import (
 const webcamReadTimeout = 5
 
 type Camera struct {
-	callback func(image.Image)
+	callback FrameCallback
 }
 
 func (c *Camera) Start(camID, width, height int) error {
@@ -52,18 +51,16 @@ func (c *Camera) Start(camID, width, height int) error {
 				fmt.Fprint(os.Stderr, err.Error())
 				continue
 			default:
-				panic(err.Error())
+				c.callback(nil, err)
+				return
 			}
 
 			frame, err := cam.ReadFrame()
 			if len(frame) != 0 {
 				img, err := jpeg.Decode(bytes.NewReader(frame))
-				if err != nil {
-					panic("unable to decode jpeg")
-				}
-				c.callback(img)
+				c.callback(img, err)
 			} else if err != nil {
-				panic(err.Error())
+				c.callback(nil, err)
 			}
 		}
 	}()
@@ -75,6 +72,6 @@ func (c *Camera) Close() error {
 	return nil
 }
 
-func New(cb func(image.Image)) (*Camera, error) {
+func New(cb FrameCallback) (*Camera, error) {
 	return &Camera{callback: cb}, nil
 }
