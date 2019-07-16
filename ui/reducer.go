@@ -15,8 +15,18 @@ func StateReducer(s State, event Event) State {
 	s.Messages = messagesReducer(s.Messages, event)
 	s.Page = pageReducer(s.Page, event)
 	s.WinSize = winSizeReducer(s.WinSize, event)
+	s.HelpOn = helpOnReducer(s.HelpOn, event)
 
 	return s
+}
+
+func helpOnReducer(s bool, event Event) bool {
+	switch event.(type) {
+	case ToggleHelpEvent:
+		return !s
+	default:
+		return s
+	}
 }
 
 func pageReducer(s Page, event Event) Page {

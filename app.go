@@ -338,7 +338,7 @@ func (a *App) connect(ctx context.Context) (endReason string, err error) {
 			connectTimeout.Stop()
 			a.renderer.Dispatch(ui.LogEvent{
 				Level: ui.LogLevelInfo,
-				Text:  "Connected (type ctrl-d to skip)",
+				Text:  "Connected",
 			})
 
 		case webrtc.ICEConnectionStateDisconnected:
@@ -427,6 +427,9 @@ func (a *App) onKeypress(c rune) {
 			a.nextPartner = nil
 		}
 		a.cancelMu.Unlock()
+
+	case 20: // ctrl-t
+		a.renderer.Dispatch(ui.ToggleHelpEvent{})
 
 	case 127: // backspace
 		a.renderer.Dispatch(ui.BackspaceEvent{})

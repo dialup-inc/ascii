@@ -29,6 +29,9 @@ type BackspaceEvent struct{}
 // ResizeEvent indicates that the terminal window's size has changed to the specified dimensions
 type ResizeEvent term.WinSize
 
+// ToggleHelpEvent toggles the help modal
+type ToggleHelpEvent struct{}
+
 // SetPageEvent transitions to the specified page
 type SetPageEvent Page
 

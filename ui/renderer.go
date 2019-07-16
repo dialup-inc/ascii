@@ -103,15 +103,16 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.Normal()
 
 	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
-	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
 	label := "ASCII Roulette"
-	link := "dialup.com/ascii"
+	link := "hit ctrl-t for help"
 	buf.WriteString(" ")
+	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
 	buf.WriteString(label)
 	textLen := len(label) + len(link) + 2
 	if width > textLen {
 		buf.WriteString(strings.Repeat(" ", width-textLen))
 	}
+	a.Foreground(color.RGBA{0x00, 0x99, 0x99, 0xff})
 	buf.WriteString(link)
 	buf.WriteString(" ")
 
@@ -308,6 +309,46 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	buf.WriteString(strings.Repeat(" ", len(line)))
 }
 
+func (r *Renderer) drawHelp(buf *bytes.Buffer) {
+	a := term.ANSI{buf}
+
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	rows := []string{
+		"                 ",
+		"  Skip   ctrl-d  ",
+		"  Help   ctrl-t  ",
+		"  Quit   ctrl-c  ",
+		"                 ",
+	}
+
+	var boxWidth int
+	for _, r := range rows {
+		if len(r) > boxWidth {
+			boxWidth = len(r)
+		}
+	}
+
+	boxTop := (s.WinSize.Rows-len(rows)-1)/2 + 1
+	boxLeft := (s.WinSize.Cols-boxWidth)/2 + 1
+
+	a.CursorPosition(boxTop, boxLeft)
+	a.Bold()
+	a.Background(color.Black)
+	a.Foreground(color.White)
+	buf.WriteString("  Shortcuts      ")
+
+	a.Normal()
+	a.Foreground(color.Black)
+	a.Background(color.White)
+	for i, line := range rows {
+		a.CursorPosition(boxTop+i+1, boxLeft)
+		buf.WriteString(line)
+	}
+}
+
 func wordWrap(s string, lineLen int) []string {
 	var lines []string
 
@@ -354,6 +395,9 @@ func (r *Renderer) draw() {
 	case ChatPage:
 		r.drawChat(buf)
 		r.drawVideo(buf)
+		if s.HelpOn {
+			r.drawHelp(buf)
+		}
 
 	case ConfirmPage:
 		r.drawConfirm(buf)

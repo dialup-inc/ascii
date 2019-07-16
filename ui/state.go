@@ -18,6 +18,8 @@ var (
 type State struct {
 	Page Page
 
+	HelpOn bool
+
 	Input    string
 	Messages []Message
 	Image    image.Image
