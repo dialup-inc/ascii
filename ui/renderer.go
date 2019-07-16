@@ -15,7 +15,9 @@ import (
 	"github.com/dialup-inc/ascii/term"
 )
 
-const chatHeight = 5
+const (
+	chatHeight = 5
+)
 
 func NewRenderer() *Renderer {
 	return &Renderer{
@@ -69,22 +71,46 @@ func getAspect(w term.WinSize) float64 {
 	return float64(w.Height) * float64(w.Cols) / float64(w.Rows) / float64(w.Width)
 }
 
-func (r *Renderer) drawVideo(buf *bytes.Buffer) {
+func (r *Renderer) drawVideo(buf *bytes.Buffer, headHeight int) {
 	a := term.ANSI{buf}
 
 	r.stateMu.Lock()
 	s := r.state
 	r.stateMu.Unlock()
 
-	vidW, vidH := s.WinSize.Cols, s.WinSize.Rows-chatHeight
+	vidW, vidH := s.WinSize.Cols, s.WinSize.Rows-chatHeight-headHeight
 
-	a.CursorPosition(1, 1)
+	a.CursorPosition(1+headHeight, 1)
 	a.Background(color.Black)
 	a.Bold()
 
 	aspect := getAspect(s.WinSize)
 	imgANSI := Image2ANSI(s.Image, vidW, vidH, aspect, false)
 	buf.Write(imgANSI)
+}
+
+func (r *Renderer) drawHead(buf *bytes.Buffer) {
+	a := term.ANSI{buf}
+
+	r.stateMu.Lock()
+	s := r.state
+	r.stateMu.Unlock()
+
+	line1 := " dialup.com/ascii"
+	line2 := " (we're hiring!)"
+
+	a.CursorPosition(1, 1)
+
+	a.Background(color.RGBA{0x12, 0x12, 0x12, 0xFF})
+
+	a.Foreground(color.RGBA{0x00, 0xFF, 0xFF, 0xFF})
+	buf.WriteString(line1)
+
+	a.Foreground(color.RGBA{0x00, 0x44, 0x44, 0xFF})
+	buf.WriteString(line2)
+
+	remaining := s.WinSize.Cols - len(line1) - len(line2)
+	buf.WriteString(strings.Repeat(" ", remaining))
 }
 
 func (r *Renderer) drawChat(buf *bytes.Buffer) {
@@ -99,6 +125,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	logTop := chatTop + 1
 	chatBottom := logTop + 3
 
+	a.CursorPosition(chatTop, 1)
 	// Draw background
 	a.Normal()
 
@@ -386,15 +413,16 @@ func (r *Renderer) draw() {
 	switch s.Page {
 	case GlobePage:
 		r.drawTitle(buf, "Presented by dialup.com", "(we're hiring!)")
-		r.drawVideo(buf)
+		r.drawVideo(buf, 0)
 
 	case PionPage:
 		r.drawTitle(buf, "Powered by Pion", "")
-		r.drawVideo(buf)
+		r.drawVideo(buf, 0)
 
 	case ChatPage:
+		r.drawHead(buf)
 		r.drawChat(buf)
-		r.drawVideo(buf)
+		r.drawVideo(buf, 1)
 		if s.HelpOn {
 			r.drawHelp(buf)
 		}
