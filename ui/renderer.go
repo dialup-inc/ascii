@@ -209,7 +209,7 @@ func (r *Renderer) drawChat(buf *bytes.Buffer) {
 	a.BlinkOff()
 }
 
-func (r *Renderer) drawTitle(buf *bytes.Buffer, line1, line2 string) {
+func (r *Renderer) drawTitle(buf *bytes.Buffer, line string) {
 	a := term.ANSI{buf}
 
 	r.stateMu.Lock()
@@ -223,12 +223,8 @@ func (r *Renderer) drawTitle(buf *bytes.Buffer, line1, line2 string) {
 	buf.WriteString(strings.Repeat(" ", s.WinSize.Cols*chatHeight))
 
 	a.Foreground(color.RGBA{0x00, 0xff, 0xff, 0xff})
-	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line1))/2+1)
-	buf.WriteString(line1)
-
-	a.Foreground(color.RGBA{0x00, 0x55, 0x55, 0xff})
-	a.CursorPosition(s.WinSize.Rows-1, (s.WinSize.Cols-len(line2))/2+1)
-	buf.WriteString(line2)
+	a.CursorPosition(s.WinSize.Rows-2, (s.WinSize.Cols-len(line))/2+1)
+	buf.WriteString(line)
 }
 
 func (r *Renderer) drawBlank(buf *bytes.Buffer) {
@@ -412,11 +408,11 @@ func (r *Renderer) draw() {
 
 	switch s.Page {
 	case GlobePage:
-		r.drawTitle(buf, "Presented by dialup.com", "(we're hiring!)")
+		r.drawTitle(buf, "Presented by dialup.com")
 		r.drawVideo(buf, 0)
 
 	case PionPage:
-		r.drawTitle(buf, "Powered by Pion", "")
+		r.drawTitle(buf, "Powered by Pion")
 		r.drawVideo(buf, 0)
 
 	case ChatPage:
