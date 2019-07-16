@@ -232,10 +232,17 @@ func (a *App) sendMessage() {
 	}
 
 	msg := a.renderer.GetState().Input
+	msg = strings.TrimSpace(msg)
+
+	// Don't send empty messages
+	if len(msg) == 0 {
+		return
+	}
+
 	if err := a.conn.SendMessage(msg); err != nil {
 		a.renderer.Dispatch(ui.LogEvent{
 			Level: ui.LogLevelError,
-			Text:  "sending message failed",
+			Text:  fmt.Sprintf("sending failed: %v", err),
 		})
 	} else {
 		a.renderer.Dispatch(ui.SentMessageEvent(msg))
