@@ -2,9 +2,9 @@ package ascii
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
-	"errors"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v2"
@@ -41,7 +41,7 @@ func match(ctx context.Context, wsURL string, conn *webrtc.PeerConnection) error
 
 	signalConn, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("match server connect: %v", err)
 	}
 	go func() {
 		<-ctx.Done()
