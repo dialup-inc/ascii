@@ -281,7 +281,7 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 		descWidth = maxWidth
 	}
 
-	desc := "This program connects you in a video chat with a random person!\nYour webcam will be activated. For more information visit dialup.com/ascii"
+	desc := "This program connects you in a video chat with a random person!\n🎥 Your webcam will activate\n🔉 There is no audio"
 	var descSections [][]string
 	for _, line := range strings.Split(desc, "\n") {
 		descSections = append(descSections, wordWrap(line, descWidth))
@@ -321,7 +321,7 @@ func (r *Renderer) drawConfirm(buf *bytes.Buffer) {
 	a.Background(color.RGBA{0x11, 0x11, 0x11, 0xFF})
 	a.Foreground(color.White)
 
-	line := "  Press Enter to Start  "
+	line := "  Press Enter to Start Camera  "
 	if s.WinSize.Cols <= 25 {
 		line = "  Press Enter  "
 	}
