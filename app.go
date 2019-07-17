@@ -326,10 +326,6 @@ func (a *App) connect(ctx context.Context) (ui.EndConnReason, error) {
 	connectTimeout := time.NewTimer(999 * time.Hour)
 	connectTimeout.Stop()
 
-	if err := a.checkConnection(ctx); err != nil {
-		return ui.EndConnSetupError, err
-	}
-
 	ended := make(chan ui.EndConnReason)
 
 	conn, err := NewConn(webrtc.Configuration{
@@ -425,6 +421,10 @@ func (a *App) connect(ctx context.Context) (ui.EndConnReason, error) {
 		Level: ui.LogLevelInfo,
 		Text:  "Found match. Connecting...",
 	})
+
+	if err := a.checkConnection(ctx); err != nil {
+		return ui.EndConnSetupError, err
+	}
 
 	var reason ui.EndConnReason
 	select {
