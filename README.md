@@ -9,7 +9,7 @@
 [![Pion](https://img.shields.io/badge/Pion-v2.0.22-red.svg)](https://github.com/pion/webrtc)
 
 <p align="center">
-  <img height="279" width="350" src=".github/demo.gif" />
+  <img height="292" width="350" src=".github/ascii-roulette.gif" />
 </p>
 <p align="center">Chat with a random person without ever leaving your terminal window.</p>
 
@@ -35,6 +35,7 @@ make
 Contributions and bug reports are welcome! Please check [the issues section](https://github.com/dialup-inc/ascii/issues) before submitting.
 
 Here are some starter issues if you'd like to help out:
+
 - [#13 - Windows Support](https://github.com/dialup-inc/ascii/issues/13)
 - [#36 - Rooms](https://github.com/dialup-inc/ascii/issues/34)
 - [#10 - Scrollback](https://github.com/dialup-inc/ascii/issues/10)
