@@ -94,7 +94,7 @@ func (a *ANSI) BlinkOff() (int, error) {
 }
 
 func (a *ANSI) Reset() (int, error) {
-	return a.Display.Write([]byte{'\033', '[', '0'})
+	return a.Display.Write([]byte{'\033', 'c'})
 }
 
 var ANSIPalette = color.Palette{

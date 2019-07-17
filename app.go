@@ -1,13 +1,16 @@
 package ascii
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"log"
 	"math"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -187,7 +190,41 @@ func (a *App) run(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) catchError(msg interface{}, stack []byte) {
+	buf := bytes.NewBuffer(nil)
+	ansi := term.ANSI{buf}
+
+	ansi.CursorPosition(1, 1)
+	ansi.Reset()
+
+	ansi.Bold()
+	ansi.Foreground(color.RGBA{0xFF, 0x00, 0x00, 0xFF})
+	buf.WriteString("Oops! ASCII Roulette hit a snag.\n")
+	ansi.Normal()
+	ansi.ForegroundReset()
+
+	buf.WriteString("\n")
+	buf.WriteString("Please report this error at https://github.com/dialup-inc/ascii\n")
+	buf.WriteString("\n")
+	buf.WriteString("\n")
+
+	buf.WriteString(fmt.Sprintf("[panic] %v\n", msg))
+	buf.WriteString("\n")
+	buf.Write(stack)
+	buf.WriteString("\n")
+
+	data := bytes.ReplaceAll(buf.Bytes(), []byte("\n"), []byte("\r\n"))
+	os.Stderr.Write(data)
+}
+
 func (a *App) Run(ctx context.Context) error {
+	// Show a nice error page if there's a panic somewhere in the code
+	defer func() {
+		if r := recover(); r != nil {
+			a.catchError(r, debug.Stack())
+		}
+	}()
+
 	err := a.run(ctx)
 
 	// Clean up:

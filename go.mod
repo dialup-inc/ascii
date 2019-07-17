@@ -20,6 +20,7 @@ require (
 	github.com/pion/rtp v1.1.3
 	github.com/pion/stun v0.3.1
 	github.com/pion/webrtc/v2 v2.0.24-0.20190715150138-632530bc69a7
+	github.com/prometheus/client_golang v1.0.0 // indirect
 	github.com/shuLhan/go-bindata v3.4.0+incompatible // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
