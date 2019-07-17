@@ -204,7 +204,7 @@ func (a *App) catchError(msg interface{}, stack []byte) {
 	ansi.ForegroundReset()
 
 	buf.WriteString("\n")
-	buf.WriteString("Please report this error at https://github.com/dialup-inc/ascii\n")
+	buf.WriteString("Please report this error at https://github.com/dialup-inc/ascii/issues/new/choose\n")
 	buf.WriteString("\n")
 	buf.WriteString("\n")
 
