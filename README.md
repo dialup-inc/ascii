@@ -24,6 +24,8 @@ bash <(curl -Ls dialup.com/ascii)
 
 **Or, build from from source:**
 
+First, install [libvpx](https://www.webmproject.org/code/). On OSX you can run `brew install libvpx`
+
 ```sh
 git clone https://github.com/dialup-inc/ascii.git
 cd ascii
